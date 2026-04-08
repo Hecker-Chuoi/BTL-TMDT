@@ -379,6 +379,121 @@ export const getSwitchableUsers = () => {
     return getLoggedInUsers();
 };
 
+// Remove Vietnamese diacritics for keyword matching
+const removeDiacritics = (str) => {
+    return str
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .trim();
+};
+
+// Keyword mapping for category detection
+const keywordMap = {
+    laptop: [
+        'laptop', 'máy tính', 'máy tính xách tay', 'máy tính cá nhân',
+        'notebook', 'ultrabook', 'macbook', 'dell', 'hp', 'lenovo', 'asus', 'acer',
+        'máy xách tay', 'computer xách tay'
+    ],
+    component: [
+        'linh kiện', 'card rời', 'vga', 'cpu', 'ram', 'ssd', 'ổ cứng', 'main', 'main board',
+        'bộ nhớ', 'card đồ họa', 'tản nhiệt', 'nguồn', 'tủ', 'case', 'ctr', 'control',
+        'corsair', 'kingston', 'msi', 'gigabyte', 'evga'
+    ]
+};
+
+// Helper function to detect category from search query
+const detectCategoryFromKeywords = (query) => {
+    const normalizedQuery = removeDiacritics(query);
+    
+    for (const keyword of keywordMap.laptop) {
+        if (normalizedQuery.includes(removeDiacritics(keyword))) {
+            return 1; // Laptop category
+        }
+    }
+    
+    for (const keyword of keywordMap.component) {
+        if (normalizedQuery.includes(removeDiacritics(keyword))) {
+            return 2; // Component category
+        }
+    }
+    
+    return null;
+};
+
+// Get matching keywords
+const getMatchingKeywords = (query, limit = 5) => {
+    const normalizedQuery = removeDiacritics(query);
+    const allKeywords = [...keywordMap.laptop, ...keywordMap.component];
+    
+    return allKeywords
+        .filter(keyword => removeDiacritics(keyword).includes(normalizedQuery))
+        .slice(0, limit);
+};
+
+// Get top selling products by category
+export const getTopProductsByCategory = (categoryId, limit = 3) => {
+    const products = getDB();
+    const orderItems = JSON.parse(localStorage.getItem('order_items')) || [];
+    
+    // Count purchases for each product
+    const productBuyCounts = {};
+    orderItems.forEach(item => {
+        productBuyCounts[item.product_id] = (productBuyCounts[item.product_id] || 0) + item.quantity;
+    });
+    
+    // Filter by category and sort by purchase count
+    const topProducts = products
+        .filter(p => p.category_id === categoryId)
+        .map(p => ({
+            ...p,
+            buyCount: productBuyCounts[p.id] || 0
+        }))
+        .sort((a, b) => b.buyCount - a.buyCount)
+        .slice(0, limit);
+    
+    return topProducts;
+};
+
+// Get search suggestions
+export const getSearchSuggestions = (searchQuery, limit = 3) => {
+    const products = getDB();
+    const query = searchQuery.trim();
+    
+    // If empty, return top 3 of each category
+    if (!query) {
+        return {
+            keywords: [],
+            products: [
+                ...getTopProductsByCategory(1, 3),
+                ...getTopProductsByCategory(2, 3)
+            ]
+        };
+    }
+    
+    // Get matching keywords
+    const matchingKeywords = getMatchingKeywords(query, 5);
+    
+    // Detect category from keywords
+    const categoryId = detectCategoryFromKeywords(query);
+    
+    // Get top products from detected category
+    let suggestedProducts = [];
+    if (categoryId) {
+        suggestedProducts = getTopProductsByCategory(categoryId, limit);
+    } else {
+        // If no category detected, search by product name
+        suggestedProducts = products
+            .filter(p => removeDiacritics(p.name).includes(removeDiacritics(query)))
+            .slice(0, limit);
+    }
+    
+    return {
+        keywords: matchingKeywords,
+        products: suggestedProducts
+    };
+};
+
 const defaultUsers = [
     { id: 101, email: "khachhang1@gmail.com", password: "123", full_name: "Khách Hàng Vip", role: "USER", status: "ACTIVE" },
     { id: 102, email: "khachhang2@gmail.com", password: "123", full_name: "Thượng Đế Mua Hàng", role: "USER", status: "ACTIVE" },
@@ -428,7 +543,23 @@ const initMockData = () => {
     if (!localStorage.getItem('brands')) localStorage.setItem('brands', JSON.stringify(dbBrands));
     if (!localStorage.getItem('addresses')) localStorage.setItem('addresses', JSON.stringify([]));
     if (!localStorage.getItem('orders')) localStorage.setItem('orders', JSON.stringify([]));
-    if (!localStorage.getItem('order_items')) localStorage.setItem('order_items', JSON.stringify([]));
+    
+    // Sample order items for testing search suggestions
+    if (!localStorage.getItem('order_items')) {
+        const sampleOrderItems = [
+            { id: 1, order_id: 1, product_id: 1, quantity: 5 }, // MacBook - 5 times
+            { id: 2, order_id: 1, product_id: 1, quantity: 2 },
+            { id: 3, order_id: 2, product_id: 1, quantity: 3 },
+            { id: 4, order_id: 2, product_id: 2, quantity: 4 }, // VGA - 4 times
+            { id: 5, order_id: 3, product_id: 2, quantity: 2 },
+            { id: 6, order_id: 3, product_id: 3, quantity: 6 }, // Asus - 6 times (most)
+            { id: 7, order_id: 4, product_id: 3, quantity: 3 },
+            { id: 8, order_id: 4, product_id: 4, quantity: 2 }, // Corsair RAM - 2 times
+            { id: 9, order_id: 5, product_id: 5, quantity: 1 }, // Lenovo - 1 time
+        ];
+        localStorage.setItem('order_items', JSON.stringify(sampleOrderItems));
+    }
+    
     if (!localStorage.getItem('payments')) localStorage.setItem('payments', JSON.stringify([]));
 };
 
