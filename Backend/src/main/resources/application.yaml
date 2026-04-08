@@ -1,3 +1,45 @@
+server:
+  port: 8080
+
 spring:
   application:
     name: BTL HTTMDT
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: http://localhost:8081/realms/myrealm
+
+  datasource:
+    driver-class-name: org.postgresql.Driver
+    url: jdbc:postgresql://localhost:5432/ecommerce_laptop
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+keycloak:
+  auth-server-url: http://localhost:8080
+  realm: my realm
+  resource: my-app
+  credentials:
+    secret: {Client Secret}
+  bearer-only: true
+
+openApi-config:
+  title: "BTL HTTMDT API"
+  description: "E-commerce laptop backend API"
+  version: "1.0.0"
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
