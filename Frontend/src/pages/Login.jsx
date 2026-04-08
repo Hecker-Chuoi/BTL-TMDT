@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { addLoggedInUser } from '../utils/mockData';
 
 const Login = () => {
     const [isLoginTab, setIsLoginTab] = useState(true);
@@ -13,6 +14,8 @@ const Login = () => {
     const [regName, setRegName] = useState('');
     const [regEmail, setRegEmail] = useState('');
     const [regPassword, setRegPassword] = useState('');
+    const [regPhone, setRegPhone] = useState('');
+    const [regAddress, setRegAddress] = useState('');
 
     const handleLogin = (e) => {
         e.preventDefault();
@@ -20,7 +23,7 @@ const Login = () => {
         const user = users.find(u => u.email === loginEmail && u.password === loginPassword);
 
         if (user) {
-            localStorage.setItem('currentUser', JSON.stringify({ name: user.full_name, email: user.email, role: user.role }));
+            addLoggedInUser(user);
             alert('Đăng nhập thành công!');
 
             if (user.role === 'ADMIN') {
@@ -47,6 +50,8 @@ const Login = () => {
             email: regEmail,
             password: regPassword,
             full_name: regName,
+            phone: regPhone,
+            address: regAddress,
             role: "USER",
             status: "ACTIVE",
             created_at: new Date().toISOString()
@@ -59,6 +64,8 @@ const Login = () => {
         setRegName('');
         setRegEmail('');
         setRegPassword('');
+        setRegPhone('');
+        setRegAddress('');
         setIsLoginTab(true); // Switch to login tab
     };
 
@@ -100,6 +107,14 @@ const Login = () => {
                         <div className="form-group">
                             <label>Mật khẩu</label>
                             <input type="password" value={regPassword} onChange={e => setRegPassword(e.target.value)} placeholder="Tạo mật khẩu" required />
+                        </div>
+                        <div className="form-group">
+                            <label>Số điện thoại</label>
+                            <input type="tel" value={regPhone} onChange={e => setRegPhone(e.target.value)} placeholder="VD: 0901234567" />
+                        </div>
+                        <div className="form-group">
+                            <label>Địa chỉ</label>
+                            <input type="text" value={regAddress} onChange={e => setRegAddress(e.target.value)} placeholder="VD: 123 Nguyễn Văn A, Quận 1, TP.HCM" />
                         </div>
                         <button type="submit" className="btn-auth">Đăng Ký Tài Khoản</button>
                     </form>

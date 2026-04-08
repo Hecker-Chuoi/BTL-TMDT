@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getDB, setDB, getMainImage, formatMoney, dbBrands } from '../utils/mockData';
+import { getDB, setDB, getMainImage, formatMoney, dbBrands, getFlashSale, setFlashSale } from '../utils/mockData';
 import { useNavigate } from 'react-router-dom';
 
 const Admin = () => {
@@ -8,6 +8,7 @@ const Admin = () => {
     const itemsPerPage = 4;
     
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [editingProductId, setEditingProductId] = useState(null);
     const [currentTab, setCurrentTab] = useState('products');
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
     const [filterCategory, setFilterCategory] = useState('all'); // 'all' | '1' | '2'
@@ -16,6 +17,14 @@ const Admin = () => {
     const [categories, setCategories] = useState([]);
     const [brands, setBrands] = useState([]);
     const [orders, setOrders] = useState([]);
+    const [customers, setCustomers] = useState([]);
+    const [flashSale, setFlashSaleState] = useState(null);
+
+    // Flash sale form state
+    const [flashSaleDiscountPercent, setFlashSaleDiscountPercent] = useState('20');
+    const [flashSaleStartTime, setFlashSaleStartTime] = useState('');
+    const [flashSaleEndTime, setFlashSaleEndTime] = useState('');
+    const [flashSaleSelectedProducts, setFlashSaleSelectedProducts] = useState([]);
 
     // Form state
     const [formName, setFormName] = useState('');
@@ -25,11 +34,15 @@ const Admin = () => {
     const [formStock, setFormStock] = useState('10');
     const [formImg, setFormImg] = useState('');        // base64 data URL
     const [formImgPreview, setFormImgPreview] = useState(''); // for preview
+    const [formDescription, setFormDescription] = useState('');
+    const [formSpecs, setFormSpecs] = useState([
+        { spec_key: '', spec_value: '' }
+    ]);
     const [adminProfile, setAdminProfile] = useState("Admin");
     const navigate = useNavigate();
 
     useEffect(() => {
-        const user = JSON.parse(localStorage.getItem('currentUser'));
+        const user = JSON.parse(sessionStorage.getItem('currentUser'));
         if (!user || user.role !== 'ADMIN') {
             alert("Bạn không có quyền truy cập trang quản trị này!");
             navigate('/login');
@@ -43,6 +56,19 @@ const Admin = () => {
         setCategories(JSON.parse(localStorage.getItem('categories')) || []);
         setBrands(JSON.parse(localStorage.getItem('brands')) || []);
         setOrders(JSON.parse(localStorage.getItem('orders')) || []);
+        
+        // Load customers (users with role = 'USER')
+        const users = JSON.parse(localStorage.getItem('users')) || [];
+        const userCustomers = users.filter(u => u.role === 'USER');
+        setCustomers(userCustomers);
+        
+        // Load flash sale data
+        const flashSaleData = getFlashSale();
+        setFlashSaleState(flashSaleData);
+        setFlashSaleDiscountPercent(String(flashSaleData.discount_percent || 20));
+        setFlashSaleStartTime(flashSaleData.start_time ? flashSaleData.start_time.substring(0, 16) : '');
+        setFlashSaleEndTime(flashSaleData.end_time ? flashSaleData.end_time.substring(0, 16) : '');
+        setFlashSaleSelectedProducts(flashSaleData.product_ids || []);
     }, [navigate]);
 
     const handleLogout = () => {
@@ -63,10 +89,63 @@ const Admin = () => {
         }
     };
 
+    const resetForm = () => {
+        setFormName('');
+        setFormCategory('1');
+        setFormBrand('1');
+        setFormPrice('');
+        setFormStock('10');
+        setFormImg('');
+        setFormImgPreview('');
+        setFormDescription('');
+        setFormSpecs([{ spec_key: '', spec_value: '' }]);
+        setEditingProductId(null);
+    };
+
+    const handleEditProduct = (product) => {
+        setFormName(product.name);
+        setFormCategory(String(product.category_id));
+        setFormBrand(String(product.brand_id));
+        setFormPrice(String(product.price));
+        setFormStock(String(product.stock));
+        setFormDescription(product.description || '');
+        setFormSpecs(product.specs && product.specs.length > 0 ? product.specs : [{ spec_key: '', spec_value: '' }]);
+        if (product.images && product.images.length > 0) {
+            const mainImage = product.images.find(img => img.is_main) || product.images[0];
+            setFormImgPreview(mainImage.image_url);
+            setFormImg(mainImage.image_url);
+        } else {
+            setFormImg('');
+            setFormImgPreview('');
+        }
+        setEditingProductId(product.id);
+        setIsModalOpen(true);
+    };
+
     const updateOrderStatus = (orderId, newStatus) => {
         const updatedOrders = orders.map(o => o.id === orderId ? { ...o, status: newStatus } : o);
         setOrders(updatedOrders);
         localStorage.setItem('orders', JSON.stringify(updatedOrders));
+    };
+
+    const handleFlashSaleSubmit = (e) => {
+        e.preventDefault();
+        
+        if (flashSaleSelectedProducts.length === 0) {
+            alert("Vui lòng chọn ít nhất 1 sản phẩm cho flash sale!");
+            return;
+        }
+
+        const updatedFlashSale = {
+            discount_percent: parseInt(flashSaleDiscountPercent),
+            start_time: new Date(flashSaleStartTime).toISOString(),
+            end_time: new Date(flashSaleEndTime).toISOString(),
+            product_ids: flashSaleSelectedProducts
+        };
+
+        setFlashSale(updatedFlashSale);
+        setFlashSaleState(updatedFlashSale);
+        alert("Cập nhật Flash Sale thành công!");
     };
 
     const handleImageChange = (e) => {
@@ -82,39 +161,65 @@ const Admin = () => {
 
     const handleFormSubmit = (e) => {
         e.preventDefault();
-        const newProduct = {
-            id: products.length > 0 ? Math.max(...products.map(p => p.id)) + 1 : 1,
-            name: formName,
-            category_id: parseInt(formCategory),
-            brand_id: parseInt(formBrand),
-            price: parseInt(formPrice),
-            stock: parseInt(formStock),
-            status: "ACTIVE",
-            images: [
-                {
-                    id: Date.now(),
-                    image_url: formImg || 'https://placehold.co/300x200?text=No+Image',
-                    is_main: true
-                }
-            ],
-            specs: [] 
-        };
-
-        const updated = [...products, newProduct];
-        setProducts(updated);
-        setDB(updated);
         
-        // Reset and close
-        setFormName('');
-        setFormCategory('1');
-        setFormBrand('1');
-        setFormPrice('');
-        setFormStock('10');
-        setFormImg('');
-        setFormImgPreview('');
-        setIsModalOpen(false);
-        setCurrentPage(1);
-        alert("Thêm sản phẩm thành công!");
+        if (editingProductId) {
+            // Edit mode
+            const updated = products.map(p => {
+                if (p.id === editingProductId) {
+                    return {
+                        ...p,
+                        name: formName,
+                        category_id: parseInt(formCategory),
+                        brand_id: parseInt(formBrand),
+                        price: parseInt(formPrice),
+                        stock: parseInt(formStock),
+                        description: formDescription,
+                        images: [
+                            {
+                                id: p.images && p.images[0] ? p.images[0].id : Date.now(),
+                                image_url: formImg || 'https://placehold.co/300x200?text=No+Image',
+                                is_main: true
+                            }
+                        ],
+                        specs: formSpecs.filter(s => s.spec_key && s.spec_value) 
+                    };
+                }
+                return p;
+            });
+            setProducts(updated);
+            setDB(updated);
+            resetForm();
+            setIsModalOpen(false);
+            alert("Cập nhật sản phẩm thành công!");
+        } else {
+            // Add new mode
+            const newProduct = {
+                id: products.length > 0 ? Math.max(...products.map(p => p.id)) + 1 : 1,
+                name: formName,
+                category_id: parseInt(formCategory),
+                brand_id: parseInt(formBrand),
+                price: parseInt(formPrice),
+                stock: parseInt(formStock),
+                description: formDescription,
+                status: "ACTIVE",
+                images: [
+                    {
+                        id: Date.now(),
+                        image_url: formImg || 'https://placehold.co/300x200?text=No+Image',
+                        is_main: true
+                    }
+                ],
+                specs: formSpecs.filter(s => s.spec_key && s.spec_value) 
+            };
+
+            const updated = [...products, newProduct];
+            setProducts(updated);
+            setDB(updated);
+            resetForm();
+            setIsModalOpen(false);
+            setCurrentPage(1);
+            alert("Thêm sản phẩm thành công!");
+        }
     };
 
     // Filter + Pagination
@@ -147,10 +252,10 @@ const Admin = () => {
                     {isSidebarOpen ? 'TechStore Admin' : 'TS'}
                 </div>
                 <ul className="admin-nav-menu">
-                    <li><a href="#" className="admin-nav-item" style={{ whiteSpace: 'nowrap' }}><i className="fas fa-tachometer-alt"></i>{isSidebarOpen && ' Tổng quan'}</a></li>
                     <li><a href="#" className={`admin-nav-item ${currentTab === 'products' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setCurrentTab('products'); }} style={{ whiteSpace: 'nowrap' }}><i className="fas fa-box"></i>{isSidebarOpen && ' Quản lý Sản phẩm'}</a></li>
+                    <li><a href="#" className={`admin-nav-item ${currentTab === 'flashsale' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setCurrentTab('flashsale'); }} style={{ whiteSpace: 'nowrap' }}><i className="fas fa-bolt"></i>{isSidebarOpen && ' Flash Sale'}</a></li>
                     <li><a href="#" className={`admin-nav-item ${currentTab === 'orders' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setCurrentTab('orders'); }} style={{ whiteSpace: 'nowrap' }}><i className="fas fa-shopping-cart"></i>{isSidebarOpen && ' Quản lý Đơn hàng'}</a></li>
-                    <li><a href="#" className="admin-nav-item" style={{ whiteSpace: 'nowrap' }}><i className="fas fa-users"></i>{isSidebarOpen && ' Khách hàng'}</a></li>
+                    <li><a href="#" className={`admin-nav-item ${currentTab === 'customers' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setCurrentTab('customers'); }} style={{ whiteSpace: 'nowrap' }}><i className="fas fa-users"></i>{isSidebarOpen && ' Khách hàng'}</a></li>
                 </ul>
             </aside>
 
@@ -234,7 +339,8 @@ const Admin = () => {
                                         <td>{categories.find(c => c.id === parseInt(p.category_id))?.name || p.category_id}</td>
                                         <td style={{ color: '#e74c3c', fontWeight: 'bold' }}>{formatMoney(p.price)}</td>
                                         <td style={{ fontWeight: 'bold', color: p.stock > 0 ? '#27ae60' : 'red' }}>{p.stock}</td>
-                                        <td>
+                                        <td style={{ display: 'flex', gap: '8px' }}>
+                                            <button className="action-btn" style={{ background: '#3498db', color: 'white' }} onClick={() => handleEditProduct(p)}><i className="fas fa-edit"></i> Sửa</button>
                                             <button className="action-btn btn-delete" onClick={() => handleDelete(p.id)}><i className="fas fa-trash"></i> Xóa</button>
                                         </td>
                                     </tr>
@@ -298,12 +404,122 @@ const Admin = () => {
                     </div>
                 </section>
                 )}
+
+                {currentTab === 'customers' && (
+                <section className="admin-content-area">
+                    <div className="admin-page-title">
+                        <h2>Quản lý Khách hàng</h2>
+                    </div>
+                    <div className="table-container">
+                        <table>
+                            <thead>
+                                <tr><th>ID</th><th>Tên khách hàng</th><th>Email</th><th>Số điện thoại</th><th>Địa chỉ</th><th>Ngày đăng ký</th></tr>
+                            </thead>
+                            <tbody>
+                                {customers.map(c => (
+                                    <tr key={c.id}>
+                                        <td>#{c.id}</td>
+                                        <td><strong>{c.full_name}</strong></td>
+                                        <td>{c.email}</td>
+                                        <td>{c.phone || 'Chưa cập nhật'}</td>
+                                        <td>{c.address || 'Chưa cập nhật'}</td>
+                                        <td>{new Date(c.created_at || Date.now()).toLocaleDateString('vi-VN')}</td>
+                                    </tr>
+                                ))}
+                                {customers.length === 0 && <tr><td colSpan="6" style={{ textAlign: 'center' }}>Chưa có khách hàng nào</td></tr>}
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+                )}
+
+                {currentTab === 'flashsale' && (
+                <section className="admin-content-area">
+                    <div className="admin-page-title">
+                        <h2>Quản lý Flash Sale</h2>
+                    </div>
+
+                    <div style={{ background: 'white', padding: '30px', borderRadius: '8px', boxShadow: '0 2px 5px rgba(0,0,0,0.1)' }}>
+                        <form onSubmit={handleFlashSaleSubmit}>
+                            <div className="form-group">
+                                <label>% Giảm giá:</label>
+                                <input 
+                                    type="number" 
+                                    min="1" 
+                                    max="100"
+                                    value={flashSaleDiscountPercent} 
+                                    onChange={e => setFlashSaleDiscountPercent(e.target.value)} 
+                                    required 
+                                    style={{ width: '100px', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+                                />
+                                <span style={{ marginLeft: '10px', fontSize: '14px', color: '#666' }}>%</span>
+                            </div>
+
+                            <div className="form-group">
+                                <label>Thời gian bắt đầu:</label>
+                                <input 
+                                    type="datetime-local" 
+                                    value={flashSaleStartTime} 
+                                    onChange={e => setFlashSaleStartTime(e.target.value)} 
+                                    required 
+                                    style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+                                />
+                            </div>
+
+                            <div className="form-group">
+                                <label>Thời gian kết thúc:</label>
+                                <input 
+                                    type="datetime-local" 
+                                    value={flashSaleEndTime} 
+                                    onChange={e => setFlashSaleEndTime(e.target.value)} 
+                                    required 
+                                    style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+                                />
+                            </div>
+
+                            <div className="form-group">
+                                <label>Chọn sản phẩm cho Flash Sale:</label>
+                                <div style={{ background: '#f9f9f9', padding: '15px', borderRadius: '4px', maxHeight: '400px', overflowY: 'auto' }}>
+                                    {products.map(product => (
+                                        <div key={product.id} style={{ display: 'flex', alignItems: 'center', marginBottom: '12px', paddingBottom: '12px', borderBottom: '1px solid #eee' }}>
+                                            <input 
+                                                type="checkbox"
+                                                checked={flashSaleSelectedProducts.includes(product.id)}
+                                                onChange={e => {
+                                                    if (e.target.checked) {
+                                                        setFlashSaleSelectedProducts([...flashSaleSelectedProducts, product.id]);
+                                                    } else {
+                                                        setFlashSaleSelectedProducts(flashSaleSelectedProducts.filter(id => id !== product.id));
+                                                    }
+                                                }}
+                                                style={{ marginRight: '12px', width: '18px', height: '18px', cursor: 'pointer' }}
+                                            />
+                                            <img src={getMainImage(product)} alt={product.name} style={{ width: '50px', height: '50px', marginRight: '12px', borderRadius: '4px', objectFit: 'cover' }} />
+                                            <div style={{ flex: 1 }}>
+                                                <div style={{ fontWeight: 'bold' }}>{product.name}</div>
+                                                <div style={{ fontSize: '12px', color: '#666' }}>{formatMoney(product.price)}</div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                                <div style={{ marginTop: '10px', padding: '10px', background: '#e8f5e9', borderRadius: '4px', fontSize: '14px', color: '#2e7d32' }}>
+                                    <i className="fas fa-info-circle"></i> {flashSaleSelectedProducts.length} sản phẩm được chọn
+                                </div>
+                            </div>
+
+                            <button type="submit" className="btn-submit" style={{ padding: '12px 30px', fontSize: '16px' }}>
+                                <i className="fas fa-save"></i> Cập nhật Flash Sale
+                            </button>
+                        </form>
+                    </div>
+                </section>
+                )}
             </main>
 
             <div className={`modal ${isModalOpen ? 'active' : ''}`}>
                 <div className="modal-content">
-                    <span className="close-modal" onClick={() => setIsModalOpen(false)}><i className="fas fa-times"></i></span>
-                    <h3 style={{ marginBottom: '20px' }}>Thêm Sản Phẩm Mới</h3>
+                    <span className="close-modal" onClick={() => { setIsModalOpen(false); resetForm(); }}><i className="fas fa-times"></i></span>
+                    <h3 style={{ marginBottom: '20px' }}>{editingProductId ? 'Sửa Sản Phẩm' : 'Thêm Sản Phẩm Mới'}</h3>
                     <form onSubmit={handleFormSubmit}>
                         <div className="form-group">
                             <label>Tên Sản Phẩm:</label>
@@ -354,6 +570,63 @@ const Admin = () => {
                                     <p style={{ fontSize: '12px', color: '#888', marginTop: '4px' }}>Ảnh xác nhận</p>
                                 </div>
                             )}
+                        </div>
+                        <div className="form-group">
+                            <label>Đặc điểm nổi bật:</label>
+                            <textarea 
+                                rows="3"
+                                value={formDescription}
+                                onChange={e => setFormDescription(e.target.value)}
+                                placeholder="Mô tả những điểm nổi bật của sản phẩm..."
+                                style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+                            />
+                        </div>
+                        <div className="form-group">
+                            <label>Thông số kỹ thuật:</label>
+                            <div style={{ background: '#f9f9f9', padding: '12px', borderRadius: '4px', marginBottom: '12px' }}>
+                                {formSpecs.map((spec, index) => (
+                                    <div key={index} style={{ display: 'flex', gap: '8px', marginBottom: index < formSpecs.length - 1 ? '10px' : '0' }}>
+                                        <input
+                                            type="text"
+                                            placeholder="Tên thông số (vd: CPU)"
+                                            value={spec.spec_key}
+                                            onChange={e => {
+                                                const updated = [...formSpecs];
+                                                updated[index].spec_key = e.target.value;
+                                                setFormSpecs(updated);
+                                            }}
+                                            style={{ flex: 1, padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+                                        />
+                                        <input
+                                            type="text"
+                                            placeholder="Giá trị (vd: Intel i7)"
+                                            value={spec.spec_value}
+                                            onChange={e => {
+                                                const updated = [...formSpecs];
+                                                updated[index].spec_value = e.target.value;
+                                                setFormSpecs(updated);
+                                            }}
+                                            style={{ flex: 1, padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+                                        />
+                                        {formSpecs.length > 1 && (
+                                            <button
+                                                type="button"
+                                                onClick={() => setFormSpecs(formSpecs.filter((_, i) => i !== index))}
+                                                style={{ padding: '8px 12px', background: '#e74c3c', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                                            >
+                                                <i className="fas fa-trash"></i>
+                                            </button>
+                                        )}
+                                    </div>
+                                ))}
+                                <button
+                                    type="button"
+                                    onClick={() => setFormSpecs([...formSpecs, { spec_key: '', spec_value: '' }])}
+                                    style={{ width: '100%', padding: '8px', background: '#3498db', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', marginTop: '8px' }}
+                                >
+                                    <i className="fas fa-plus"></i> Thêm thông số
+                                </button>
+                            </div>
                         </div>
                         <button type="submit" className="btn-submit">Lưu Sản Phẩm</button>
                     </form>

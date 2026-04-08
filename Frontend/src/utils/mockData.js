@@ -243,7 +243,7 @@ export const formatMoney = (amount) => {
 };
 
 export const getCartKey = () => {
-    const user = JSON.parse(localStorage.getItem('currentUser'));
+    const user = JSON.parse(sessionStorage.getItem('currentUser'));
     if (!user) return null;
     return `cartItems_${user.email}`;
 };
@@ -271,6 +271,112 @@ export const addToCart = (productId) => {
     localStorage.setItem(cartKey, JSON.stringify(cartItems));
     window.dispatchEvent(new Event('cartUpdated')); // Custom event for Header to catch
     alert("Đã thêm vào giỏ hàng!");
+};
+
+export const getFlashSale = () => {
+    try {
+        let flashSale = localStorage.getItem('flashSale');
+        if (!flashSale) {
+            // Default flash sale config
+            const defaultFlashSale = {
+                discount_percent: 20,
+                start_time: new Date(Date.now()).toISOString(),
+                end_time: new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString(), // 4 giờ từ bây giờ
+                product_ids: [1, 2, 5] // IDs của sản phẩm trong flash sale
+            };
+            localStorage.setItem('flashSale', JSON.stringify(defaultFlashSale));
+            return defaultFlashSale;
+        }
+        return JSON.parse(flashSale);
+    } catch {
+        return {
+            discount_percent: 20,
+            start_time: new Date(Date.now()).toISOString(),
+            end_time: new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString(),
+            product_ids: [1, 2, 5]
+        };
+    }
+};
+
+export const setFlashSale = (flashSaleData) => {
+    localStorage.setItem('flashSale', JSON.stringify(flashSaleData));
+};
+
+export const getFlashSaleDiscountForProduct = (productId) => {
+    const flashSale = getFlashSale();
+    const now = new Date();
+    const startTime = new Date(flashSale.start_time);
+    const endTime = new Date(flashSale.end_time);
+    
+    // Kiểm tra xem hiện tại có trong khoảng thời gian flash sale không
+    if (now >= startTime && now < endTime && flashSale.product_ids.includes(productId)) {
+        return flashSale.discount_percent;
+    }
+    return 0; // Không có discount
+};
+
+// ===== Multi-Session Management =====
+export const getActiveUser = () => {
+    const currentUser = sessionStorage.getItem('currentUser');
+    return currentUser ? JSON.parse(currentUser) : null;
+};
+
+export const setActiveUser = (email) => {
+    const users = JSON.parse(localStorage.getItem('users')) || [];
+    const user = users.find(u => u.email === email);
+    if (user) {
+        sessionStorage.setItem('currentUser', JSON.stringify({
+            name: user.full_name,
+            email: user.email,
+            role: user.role
+        }));
+        return true;
+    }
+    return false;
+};
+
+export const getLoggedInUsers = () => {
+    const loggedInStr = localStorage.getItem('loggedInUsers');
+    return loggedInStr ? JSON.parse(loggedInStr) : [];
+};
+
+export const addLoggedInUser = (user) => {
+    const loggedInUsers = getLoggedInUsers();
+    const exists = loggedInUsers.find(u => u.email === user.email);
+    if (!exists) {
+        loggedInUsers.push({
+            name: user.full_name,
+            email: user.email,
+            role: user.role
+        });
+        localStorage.setItem('loggedInUsers', JSON.stringify(loggedInUsers));
+    }
+    // Set as active user in sessionStorage (per-tab)
+    sessionStorage.setItem('currentUser', JSON.stringify({
+        name: user.full_name,
+        email: user.email,
+        role: user.role
+    }));
+};
+
+export const removeLoggedInUser = (email) => {
+    let loggedInUsers = getLoggedInUsers();
+    loggedInUsers = loggedInUsers.filter(u => u.email !== email);
+    localStorage.setItem('loggedInUsers', JSON.stringify(loggedInUsers));
+    
+    // If removed user was active, switch to first logged in user
+    const currentUser = getActiveUser();
+    if (currentUser?.email === email) {
+        if (loggedInUsers.length > 0) {
+            localStorage.setItem('currentUser', JSON.stringify(loggedInUsers[0]));
+        } else {
+            localStorage.removeItem('currentUser');
+        }
+    }
+};
+
+export const getSwitchableUsers = () => {
+    return getLoggedInUsers();
 };
 
 const defaultUsers = [

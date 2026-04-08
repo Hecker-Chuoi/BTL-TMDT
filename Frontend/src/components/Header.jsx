@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { getCartKey } from '../utils/mockData';
+import { getCartKey, removeLoggedInUser } from '../utils/mockData';
 
 const Header = () => {
   const [cartCount, setCartCount] = useState(0);
@@ -9,13 +9,16 @@ const Header = () => {
   const location = useLocation();
 
   useEffect(() => {
-    const user = JSON.parse(localStorage.getItem('currentUser'));
+    const user = JSON.parse(sessionStorage.getItem('currentUser'));
     setCurrentUser(user);
     updateCartCount(); // Re-check the custom cart immediately after auth change
   }, [location]);
 
   const handleLogout = () => {
-    localStorage.removeItem('currentUser');
+    if (currentUser) {
+      removeLoggedInUser(currentUser.email);
+    }
+    sessionStorage.removeItem('currentUser');
     setCurrentUser(null);
     updateCartCount();
     window.dispatchEvent(new Event('cartUpdated')); // Force other listeners (if any) to sync

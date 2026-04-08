@@ -1,10 +1,40 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { getDB, getMainImage, formatMoney, addToCart } from '../utils/mockData';
+import { getDB, getMainImage, formatMoney, addToCart, getFlashSale, getFlashSaleDiscountForProduct } from '../utils/mockData';
 
 const Home = () => {
   const [products, setProducts] = useState([]);
   const [currentSlide, setCurrentSlide] = useState(0);
+  const [flashSale, setFlashSaleData] = useState(null);
+  const [countdown, setCountdown] = useState('');
+
+  useEffect(() => {
+    // Load flash sale config
+    const flashSaleConfig = getFlashSale();
+    setFlashSaleData(flashSaleConfig);
+
+    // Update countdown
+    const updateCountdown = () => {
+      const endTime = new Date(flashSaleConfig.end_time);
+      const now = new Date();
+      const diff = endTime - now;
+
+      if (diff <= 0) {
+        setCountdown('Flash Sale đã kết thúc');
+        return;
+      }
+
+      const hours = Math.floor((diff / (1000 * 60 * 60)) % 24);
+      const minutes = Math.floor((diff / (1000 * 60)) % 60);
+      const seconds = Math.floor((diff / 1000) % 60);
+      setCountdown(`Kết thúc sau: ${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`);
+    };
+
+    updateCountdown();
+    const countdownInterval = setInterval(updateCountdown, 1000);
+
+    return () => clearInterval(countdownInterval);
+  }, []);
 
   const slides = [
     "https://placehold.co/1200x400/0056b3/white?text=Back+to+School+-+Giam+Gia+30%25",
@@ -35,11 +65,51 @@ const Home = () => {
 
   // Split data
   const flashSaleData = products.slice(0, 2); // get first 2 for flash sale
-  const laptopsData = products.filter(p => p.category_id === 1);
+  
+  // Get average rating for a product
+  const getAverageRating = (productId) => {
+    const allReviews = JSON.parse(localStorage.getItem('productReviews')) || [];
+    const productReviews = allReviews.filter(r => r.product_id === productId);
+    if (productReviews.length === 0) return 0;
+    const totalRating = productReviews.reduce((sum, r) => sum + r.rating, 0);
+    return totalRating / productReviews.length;
+  };
+
+  // Get top 4 laptops with highest rating
+  const laptopsData = products
+    .filter(p => p.category_id === 1)
+    .map(p => ({
+      ...p,
+      avgRating: getAverageRating(p.id)
+    }))
+    .sort((a, b) => b.avgRating - a.avgRating)
+    .slice(0, 4);
 
   // Reusable product card rendering
-  const ProductCard = ({ product }) => (
-    <div className="product-card">
+  const ProductCard = ({ product }) => {
+    const discountPercent = getFlashSaleDiscountForProduct(product.id);
+    const isFlashSale = discountPercent > 0;
+    const salePrice = isFlashSale ? Math.floor(product.price * (100 - discountPercent) / 100) : product.price;
+    const savedAmount = product.price - salePrice;
+
+    return (
+    <div className="product-card" style={{ position: 'relative' }}>
+      {isFlashSale && (
+        <div style={{
+          position: 'absolute',
+          top: '10px',
+          right: '10px',
+          backgroundColor: '#e74c3c',
+          color: 'white',
+          padding: '6px 10px',
+          borderRadius: '4px',
+          fontWeight: 'bold',
+          fontSize: '14px',
+          zIndex: 10
+        }}>
+          -{discountPercent}%
+        </div>
+      )}
       <Link to={`/product/${product.id}`} style={{ display: 'block', textDecoration: 'none', color: 'inherit' }}>
         <img src={getMainImage(product)} alt={product.name} />
         <div className="product-title" style={{ transition: 'color 0.3s' }} onMouseOver={e => e.target.style.color='var(--primary-color)'} onMouseOut={e => e.target.style.color='inherit'}>
@@ -47,7 +117,21 @@ const Home = () => {
         </div>
       </Link>
       <div>
-        <span className="price">{formatMoney(product.price)}</span>
+        {isFlashSale ? (
+          <div>
+            <span style={{ textDecoration: 'line-through', color: '#999', fontSize: '12px', marginRight: '8px' }}>
+              {formatMoney(product.price)}
+            </span>
+            <span className="price" style={{ color: '#e74c3c', fontWeight: 'bold' }}>{formatMoney(salePrice)}</span>
+          </div>
+        ) : (
+          <span className="price">{formatMoney(product.price)}</span>
+        )}
+        {isFlashSale && (
+          <div style={{ fontSize: '12px', color: '#27ae60', fontWeight: 'bold', marginTop: '4px' }}>
+            Tiết kiệm: {formatMoney(savedAmount)}
+          </div>
+        )}
       </div>
       <div style={{ color: '#f39c12', fontSize: '13px', margin: '8px 0' }}>
         <i className="fas fa-star"></i>
@@ -69,7 +153,8 @@ const Home = () => {
         <i className="fas fa-cart-plus"></i> {product.stock === 0 ? 'Hết hàng' : 'Thêm vào giỏ'}
       </button>
     </div>
-  );
+    );
+  };
 
   return (
     <div>
@@ -109,9 +194,15 @@ const Home = () => {
 
       <section className="flash-sale container">
         <h2 className="section-title"><i className="fas fa-bolt" style={{ color: 'red' }}></i> Flash Sale</h2>
-        <div className="countdown" id="countdown">Kết thúc sau: 02:45:30</div>
+        <div className="countdown" id="countdown" style={{ color: '#e74c3c', fontWeight: 'bold', fontSize: '18px' }}>{countdown}</div>
         <div className="product-grid">
-          {flashSaleData.length > 0 ? flashSaleData.map(p => <ProductCard key={p.id} product={p} />) : <p>Đang tải dữ liệu...</p>}
+          {flashSale && flashSale.product_ids.length > 0 ? 
+            products
+              .filter(p => flashSale.product_ids.includes(p.id))
+              .map(p => <ProductCard key={p.id} product={p} />) 
+            : 
+            <p>Đang tải dữ liệu...</p>
+          }
         </div>
       </section>
 

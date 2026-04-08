@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { getDB, getMainImage, formatMoney, addToCart, dbBrands } from '../utils/mockData';
+import { getDB, getMainImage, formatMoney, addToCart, dbBrands, getFlashSaleDiscountForProduct } from '../utils/mockData';
 
 const Shop = () => {
     const [searchParams] = useSearchParams();
@@ -156,12 +156,46 @@ const Shop = () => {
                 <div className="product-grid">
                     {currentProducts.map(p => {
                         const randomReviews = Math.floor(Math.random() * 90) + 10;
+                        const discountPercent = getFlashSaleDiscountForProduct(p.id);
+                        const salePrice = discountPercent > 0 ? Math.floor(p.price * (100 - discountPercent) / 100) : p.price;
+                        const savedAmount = p.price - salePrice;
+
                         return (
-                            <div className="product-card" key={p.id}>
+                            <div className="product-card" key={p.id} style={{ position: 'relative' }}>
+                                {discountPercent > 0 && (
+                                    <div style={{
+                                        position: 'absolute',
+                                        top: '10px',
+                                        right: '10px',
+                                        backgroundColor: '#e74c3c',
+                                        color: 'white',
+                                        padding: '6px 10px',
+                                        borderRadius: '4px',
+                                        fontWeight: 'bold',
+                                        fontSize: '14px',
+                                        zIndex: 10
+                                    }}>
+                                        -{discountPercent}%
+                                    </div>
+                                )}
                                 <Link to={`/product/${p.id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
                                     <img src={getMainImage(p)} alt={p.name} />
                                     <div className="product-title">{p.name}</div>
-                                    <div className="price">{formatMoney(p.price)}</div>
+                                    <div>
+                                        {discountPercent > 0 ? (
+                                            <div>
+                                                <span style={{ textDecoration: 'line-through', color: '#999', fontSize: '12px', marginRight: '8px' }}>
+                                                    {formatMoney(p.price)}
+                                                </span>
+                                                <span className="price" style={{ color: '#e74c3c', fontWeight: 'bold' }}>{formatMoney(salePrice)}</span>
+                                                <div style={{ fontSize: '12px', color: '#27ae60', fontWeight: 'bold', marginTop: '4px' }}>
+                                                    Tiết kiệm: {formatMoney(savedAmount)}
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div className="price">{formatMoney(p.price)}</div>
+                                        )}
+                                    </div>
                                     
                                     <div style={{ color: '#f39c12', fontSize: '13px', margin: '8px 0' }}>
                                         <i className="fas fa-star"></i>

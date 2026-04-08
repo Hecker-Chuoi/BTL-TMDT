@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { getDB, getMainImage, formatMoney, addToCart, getCartKey } from '../utils/mockData';
+import { getDB, getMainImage, formatMoney, addToCart, getCartKey, getFlashSaleDiscountForProduct } from '../utils/mockData';
 
 const ProductDetail = () => {
     const { id } = useParams();
@@ -36,7 +36,7 @@ const ProductDetail = () => {
         const productRelatedReviews = allReviews.filter(r => r.product_id === productId);
         setReviews(productRelatedReviews);
 
-        const currentUser = JSON.parse(localStorage.getItem('currentUser'));
+        const currentUser = JSON.parse(sessionStorage.getItem('currentUser'));
         if (currentUser) {
             const users = JSON.parse(localStorage.getItem('users')) || [];
             const userDb = users.find(u => u.email === currentUser.email);
@@ -61,7 +61,12 @@ const ProductDetail = () => {
                 });
 
                 let canReview = false;
-                if (latestPurchaseDate) {
+                // Kiểm tra xem user đã submit review chưa - nếu có review thì không cho edit lại
+                if (previousReview) {
+                    // User có review rồi - không thể edit lại
+                    canReview = false;
+                } else if (latestPurchaseDate) {
+                    // User chưa có review, kiểm tra có trong 1 tháng mua không
                     const oneMonthLater = new Date(latestPurchaseDate);
                     oneMonthLater.setMonth(oneMonthLater.getMonth() + 1);
                     if (new Date() < oneMonthLater) {
@@ -127,7 +132,7 @@ const ProductDetail = () => {
             return;
         }
 
-        const currentUser = JSON.parse(localStorage.getItem('currentUser'));
+        const currentUser = JSON.parse(sessionStorage.getItem('currentUser'));
         const users = JSON.parse(localStorage.getItem('users')) || [];
         const userDb = users.find(u => u.email === currentUser.email);
         const userId = userDb ? userDb.id : Date.now(); 
@@ -155,15 +160,27 @@ const ProductDetail = () => {
         }
 
         localStorage.setItem('productReviews', JSON.stringify(allReviews));
+        loadReviewsAndEligibility();
         if (userPurchaseData.existingReview) {
             alert("Đã cập nhật đánh giá thành công!");
         } else {
             alert("Cảm ơn bạn đã đánh giá sản phẩm!");
         }
-        loadReviewsAndEligibility();
+    };
+
+    // Calculate average rating
+    const getAverageRating = () => {
+        if (reviews.length === 0) return 0;
+        const totalRating = reviews.reduce((sum, r) => sum + r.rating, 0);
+        return (totalRating / reviews.length).toFixed(1);
     };
 
     if (!product) return <h3 style={{ textAlign: 'center', margin: '50px 0' }}>Sản phẩm không tồn tại!</h3>;
+
+    const discountPercent = getFlashSaleDiscountForProduct(product.id);
+    const salePrice = discountPercent > 0 ? Math.floor(product.price * (100 - discountPercent) / 100) : product.price;
+    const savedAmount = product.price - salePrice;
+    const avgRating = getAverageRating();
 
     return (
         <div className="container" style={{ marginTop: '30px', marginBottom: '50px' }}>
@@ -183,16 +200,47 @@ const ProductDetail = () => {
                     </div>
                 </div>
 
-                <div style={{ flex: 1, minWidth: '300px', paddingLeft: '20px' }}>
+                <div style={{ flex: 1, minWidth: '300px', paddingLeft: '20px', position: 'relative' }}>
+                    {discountPercent > 0 && (
+                        <div style={{
+                            position: 'absolute',
+                            top: '0',
+                            right: '0',
+                            backgroundColor: '#e74c3c',
+                            color: 'white',
+                            padding: '8px 12px',
+                            borderRadius: '4px',
+                            fontWeight: 'bold',
+                            fontSize: '16px',
+                            zIndex: 10
+                        }}>
+                            -{discountPercent}%
+                        </div>
+                    )}
+                    
                     <div style={{ color: 'var(--primary-color)', textTransform: 'uppercase', fontSize: '13px', fontWeight: 'bold', marginBottom: '8px', letterSpacing: '1px' }}>
                         Thương hiệu: {product.brand_id === 1 ? 'Apple' : product.brand_id === 2 ? 'MSI' : product.brand_id === 3 ? 'Corsair' : 'Asus'}
                     </div>
                     
                     <h1 style={{ color: 'var(--text-color)', marginBottom: '15px', fontSize: '26px' }}>{product.name}</h1>
                     
-                    <div style={{ color: 'var(--secondary-color)', fontSize: '32px', fontWeight: 'bold', marginBottom: '20px' }}>
-                        {formatMoney(product.price)}
-                    </div>
+                    {discountPercent > 0 ? (
+                        <div>
+                            <div style={{ color: '#999', fontSize: '18px', textDecoration: 'line-through', marginBottom: '5px' }}>
+                                {formatMoney(product.price)}
+                            </div>
+                            <div style={{ color: '#e74c3c', fontSize: '32px', fontWeight: 'bold', marginBottom: '10px' }}>
+                                {formatMoney(salePrice)}
+                            </div>
+                            <div style={{ color: '#27ae60', fontSize: '16px', fontWeight: 'bold', marginBottom: '20px' }}>
+                                Tiết kiệm: {formatMoney(savedAmount)}
+                            </div>
+                        </div>
+                    ) : (
+                        <div style={{ color: 'var(--secondary-color)', fontSize: '32px', fontWeight: 'bold', marginBottom: '20px' }}>
+                            {formatMoney(product.price)}
+                        </div>
+                    )}
                     
                     <div style={{ marginBottom: '25px', padding: '15px', background: '#f8f9fa', borderRadius: '6px', borderLeft: '4px solid var(--primary-color)' }}>
                         <h4 style={{ marginBottom: '8px', fontSize: '15px' }}>Đặc điểm nổi bật:</h4>
@@ -237,12 +285,29 @@ const ProductDetail = () => {
             </div>
 
             <div style={{ marginTop: '50px', background: 'white', padding: '30px', borderRadius: '8px', boxShadow: '0 2px 5px rgba(0,0,0,0.1)' }}>
-                <h2 style={{ borderBottom: '2px solid var(--bg-color)', paddingBottom: '10px', marginBottom: '20px' }}>Đánh giá & Nhận xét</h2>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '30px', paddingBottom: '20px', borderBottom: '2px solid var(--bg-color)' }}>
+                    <div>
+                        <h2 style={{ marginBottom: '5px' }}>Đánh giá & Nhận xét</h2>
+                    </div>
+                    {reviews.length > 0 && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#f39c12' }}>{avgRating}</div>
+                            <div>
+                                <div style={{ display: 'flex', gap: '3px', marginBottom: '5px' }}>
+                                    {Array.from({ length: 5 }).map((_, i) => (
+                                        <i key={i} className={i < Math.round(parseFloat(avgRating)) ? "fas fa-star" : "far fa-star"} style={{ color: i < Math.round(parseFloat(avgRating)) ? "#f39c12" : "#ccc", fontSize: '16px' }}></i>
+                                    ))}
+                                </div>
+                                <div style={{ fontSize: '13px', color: '#666' }}>({reviews.length} đánh giá)</div>
+                            </div>
+                        </div>
+                    )}
+                </div>
                 
                 {userPurchaseData.canReview ? (
                     <div style={{ background: '#f9f9f9', padding: '20px', borderRadius: '8px', marginBottom: '30px', borderLeft: '4px solid var(--primary-color)' }}>
                         <h4 style={{ marginBottom: '10px' }}>{userPurchaseData.existingReview ? "Chỉnh sửa đánh giá của bạn" : "Viết đánh giá của bạn"}</h4>
-                        {userPurchaseData.existingReview && <p style={{ fontSize: '13px', color: '#666', marginBottom: '15px' }}>* Bạn có thể sửa đổi đánh giá này trong vòng 1 tháng kể từ ngày mua sản phẩm.</p>}
+                        {userPurchaseData.existingReview && <p style={{ fontSize: '13px', color: '#666', marginBottom: '15px' }}>* Đây là lần cuối cùng bạn có thể sửa đổi đánh giá này. Sau khi cập nhật, bạn không thể sửa lại nữa.</p>}
                         <div style={{ marginBottom: '15px' }}>
                             <label style={{ fontWeight: 'bold', marginRight: '15px' }}>Chất lượng:</label>
                             <select value={rating} onChange={e => setRating(parseInt(e.target.value))} style={{ padding: '8px', borderRadius: '4px', border: '1px solid #ccc', outline: 'none' }}>

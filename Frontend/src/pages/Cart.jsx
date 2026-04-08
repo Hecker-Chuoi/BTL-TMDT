@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { formatMoney, getCartKey } from '../utils/mockData';
+import { formatMoney, getCartKey, getFlashSaleDiscountForProduct } from '../utils/mockData';
 
 const Cart = () => {
     const [cartItems, setCartItems] = useState([]);
@@ -41,7 +41,14 @@ const Cart = () => {
         window.dispatchEvent(new Event('cartUpdated'));
     };
 
-    const subTotal = cartItems.reduce((acc, item) => acc + item.price * item.quantity, 0);
+    // Calculate subtotal with flash sale discount
+    const subTotal = cartItems.reduce((acc, item) => {
+        const flashSaleDiscount = getFlashSaleDiscountForProduct(item.id);
+        const itemPrice = flashSaleDiscount > 0 
+            ? Math.floor(item.price * (100 - flashSaleDiscount) / 100) 
+            : item.price;
+        return acc + itemPrice * item.quantity;
+    }, 0);
 
     // Recalculate discount if cart changes
     useEffect(() => {
@@ -102,7 +109,7 @@ const Cart = () => {
             return;
         }
 
-        const currentUser = JSON.parse(localStorage.getItem('currentUser'));
+        const currentUser = JSON.parse(sessionStorage.getItem('currentUser'));
         const users = JSON.parse(localStorage.getItem('users')) || [];
         const userDb = users.find(u => u.email === currentUser.email);
         const userId = userDb ? userDb.id : Date.now();
@@ -208,10 +215,33 @@ const Cart = () => {
                                     <td colSpan="4" style={{ textAlign: 'center', padding: '30px', fontSize: '16px' }}>Giỏ hàng trống</td>
                                 </tr>
                             ) : (
-                                cartItems.map(item => (
+                                cartItems.map(item => {
+                                    const flashSaleDiscount = getFlashSaleDiscountForProduct(item.id);
+                                    const itemPrice = flashSaleDiscount > 0 
+                                        ? Math.floor(item.price * (100 - flashSaleDiscount) / 100) 
+                                        : item.price;
+                                    const savedAmount = item.price - itemPrice;
+
+                                    return (
                                     <tr key={item.id} style={{ borderBottom: '1px solid #eee' }}>
                                         <td style={{ padding: '15px 10px' }}>{item.name}</td>
-                                        <td style={{ padding: '15px 10px', color: 'var(--secondary-color)', fontWeight: 'bold' }}>{formatMoney(item.price)}</td>
+                                        <td style={{ padding: '15px 10px' }}>
+                                            {flashSaleDiscount > 0 ? (
+                                                <div>
+                                                    <span style={{ textDecoration: 'line-through', color: '#999', fontSize: '12px' }}>
+                                                        {formatMoney(item.price)}
+                                                    </span>
+                                                    <div style={{ color: '#e74c3c', fontWeight: 'bold' }}>
+                                                        {formatMoney(itemPrice)}
+                                                    </div>
+                                                    <div style={{ fontSize: '11px', color: '#27ae60' }}>
+                                                        Tiết kiệm: {formatMoney(savedAmount)}
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <span style={{ color: 'var(--secondary-color)', fontWeight: 'bold' }}>{formatMoney(item.price)}</span>
+                                            )}
+                                        </td>
                                         <td style={{ padding: '15px 10px', textAlign: 'center' }}>{item.quantity}</td>
                                         <td style={{ padding: '15px 10px', textAlign: 'center' }}>
                                             <button onClick={() => handleRemoveItem(item.id)} style={{ color: '#e74c3c', background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px' }} title="Xóa sản phẩm">
@@ -219,7 +249,8 @@ const Cart = () => {
                                             </button>
                                         </td>
                                     </tr>
-                                ))
+                                    );
+                                })
                             )}
                         </tbody>
                     </table>
