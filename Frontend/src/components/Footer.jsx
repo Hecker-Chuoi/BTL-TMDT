@@ -21,14 +21,14 @@ const Footer = () => {
           <div className="footer-col">
             <h3>Liên Hệ</h3>
             <ul>
-              <li><i className="fas fa-map-marker-alt"></i> 123 Đường Đại Học, TP.HCM</li>
+              <li><i className="fas fa-map-marker-alt"></i> Hà Nội, Việt Nam</li>
               <li><i className="fas fa-phone"></i> 1900 1234</li>
               <li><i className="fas fa-envelope"></i> support@techstore.vn</li>
             </ul>
           </div>
         </div>
         <div style={{ textAlign: 'center', borderTop: '1px solid #555', paddingTop: '15px', fontSize: '14px' }}>
-          © 2026 TechStore. Đồ án môn học.
+          © 2026 TechStore. 
         </div>
       </div>
     </footer>

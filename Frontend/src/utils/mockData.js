@@ -22,8 +22,8 @@ const defaultProducts = [
         brand_id: 1,
         status: "ACTIVE",
         images: [
-            { id: 1, image_url: "https://placehold.co/600x400/eee/333?text=MacBook+Main", is_main: true },
-            { id: 2, image_url: "https://placehold.co/600x400/ddd/222?text=MacBook+Side", is_main: false }
+            { id: 1, image_url: "https://cdn.tgdd.vn/Products/Images/44/231244/grey-1-750x500.jpg", is_main: true },
+            { id: 2, image_url: "https://cdn.tgdd.vn/Products/Images/44/231244/grey-2-750x500.jpg", is_main: false }
         ],
         specs: [
             { id: 1, spec_key: "CPU", spec_value: "Apple M1 8-core" },
