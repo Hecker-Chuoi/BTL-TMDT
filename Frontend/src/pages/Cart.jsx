@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { formatMoney, getCartKey, getFlashSaleDiscountForProduct } from '../utils/mockData';
+import { formatMoney, getCartKey, getFlashSaleDiscountForProduct, getUserAddresses, getDefaultAddress, addAddress, getUserById } from '../utils/mockData';
 
 const Cart = () => {
     const [cartItems, setCartItems] = useState([]);
@@ -8,6 +8,22 @@ const Cart = () => {
     const [voucherCode, setVoucherCode] = useState("");
     const [voucherMessage, setVoucherMessage] = useState({ text: "", type: "" });
     const [discountAmount, setDiscountAmount] = useState(0);
+    
+    // Address Management States
+    const [userId, setUserId] = useState(null);
+    const [userAddresses, setUserAddresses] = useState([]);
+    const [selectedAddressId, setSelectedAddressId] = useState(null);
+    const [showAddressModal, setShowAddressModal] = useState(false);
+    const [isCreatingNewAddress, setIsCreatingNewAddress] = useState(false);
+    const [newAddressForm, setNewAddressForm] = useState({
+        receiver_name: '',
+        phone: '',
+        address_line: '',
+        city: '',
+        district: '',
+        ward: '',
+        is_default: false
+    });
     
     // Form Checkout States
     const [receiverName, setReceiverName] = useState("");
@@ -30,6 +46,30 @@ const Cart = () => {
         if (key) {
             const items = JSON.parse(localStorage.getItem(key)) || [];
             setCartItems(items);
+
+            // Load user addresses
+            const currentUser = JSON.parse(sessionStorage.getItem('currentUser'));
+            if (currentUser) {
+                const users = JSON.parse(localStorage.getItem('users')) || [];
+                const userDb = users.find(u => u.email === currentUser.email);
+                if (userDb) {
+                    setUserId(userDb.id);
+                    
+                    // Load user addresses
+                    const addresses = getUserAddresses(userDb.id);
+                    setUserAddresses(addresses);
+
+                    // Load default address
+                    const defaultAddr = getDefaultAddress(userDb.id);
+                    if (defaultAddr) {
+                        setSelectedAddressId(defaultAddr.id);
+                        setReceiverName(defaultAddr.receiver_name);
+                        setPhone(defaultAddr.phone);
+                        setAddressLine(defaultAddr.address_line);
+                        setCity(defaultAddr.city);
+                    }
+                }
+            }
         }
     }, []);
 
@@ -39,6 +79,59 @@ const Cart = () => {
         setCartItems(updatedCart);
         localStorage.setItem(cartKey, JSON.stringify(updatedCart));
         window.dispatchEvent(new Event('cartUpdated'));
+    };
+
+    const handleSelectAddress = (addressId) => {
+        const selected = userAddresses.find(addr => addr.id === addressId);
+        if (selected) {
+            setSelectedAddressId(addressId);
+            setReceiverName(selected.receiver_name);
+            setPhone(selected.phone);
+            setAddressLine(selected.address_line);
+            setCity(selected.city);
+            setShowAddressModal(false);
+        }
+    };
+
+    const handleAddNewAddress = (e) => {
+        e.preventDefault();
+        if (!userId) return;
+
+        if (!newAddressForm.receiver_name || !newAddressForm.phone || !newAddressForm.address_line || !newAddressForm.city) {
+            alert("Vui lòng nhập đầy đủ thông tin địa chỉ!");
+            return;
+        }
+
+        // Add new address
+        addAddress(userId, newAddressForm);
+        
+        // Reload addresses
+        const addresses = getUserAddresses(userId);
+        setUserAddresses(addresses);
+        
+        // Select the newly created address
+        const newAddr = addresses[addresses.length - 1];
+        if (newAddr) {
+            setSelectedAddressId(newAddr.id);
+            setReceiverName(newAddr.receiver_name);
+            setPhone(newAddr.phone);
+            setAddressLine(newAddr.address_line);
+            setCity(newAddr.city);
+        }
+
+        // Reset form
+        setNewAddressForm({
+            receiver_name: '',
+            phone: '',
+            address_line: '',
+            city: '',
+            district: '',
+            ward: '',
+            is_default: false
+        });
+        setIsCreatingNewAddress(false);
+        setShowAddressModal(false);
+        alert("Thêm địa chỉ thành công!");
     };
 
     // Calculate subtotal with flash sale discount
@@ -281,7 +374,48 @@ const Cart = () => {
                             </div>
                         )}
                     </div>
-                    <h3 style={{ marginBottom: '15px' }}>Thông tin giao hàng</h3>
+                    <h3 style={{ marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        Thông tin giao hàng
+                        <button 
+                            onClick={() => setShowAddressModal(true)}
+                            style={{
+                                padding: '5px 15px',
+                                background: 'var(--primary-color)',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '4px',
+                                cursor: 'pointer',
+                                fontSize: '12px',
+                                fontWeight: 'bold'
+                            }}
+                        >
+                            <i className="fas fa-map-marker-alt"></i> Chọn địa chỉ khác
+                        </button>
+                    </h3>
+
+                    {selectedAddressId && (
+                        <div style={{
+                            padding: '12px',
+                            background: '#e8f5e9',
+                            border: '1px solid #4caf50',
+                            borderRadius: '4px',
+                            marginBottom: '15px',
+                            fontSize: '13px',
+                            color: '#2e7d32'
+                        }}>
+                            <i className="fas fa-check-circle"></i> Đang sử dụng địa chỉ mặc định
+                        </div>
+                    )}
+
+                    <div style={{ opacity: 0.7, marginBottom: '15px', padding: '10px', background: '#f5f5f5', borderRadius: '4px' }}>
+                        <div style={{ marginBottom: '8px' }}>
+                            <strong>{receiverName}</strong> | {phone}
+                        </div>
+                        <div style={{ fontSize: '13px', color: '#666' }}>
+                            {addressLine}, {city}
+                        </div>
+                    </div>
+
                     <input type="text" value={receiverName} onChange={e => setReceiverName(e.target.value)} placeholder="Họ và tên người nhận" style={{ width: '100%', padding: '10px', marginBottom: '15px', border: '1px solid #ccc', borderRadius: '4px' }} />
                     <input type="text" value={phone} onChange={e => setPhone(e.target.value)} placeholder="Số điện thoại" style={{ width: '100%', padding: '10px', marginBottom: '15px', border: '1px solid #ccc', borderRadius: '4px' }} />
                     <input type="text" value={city} onChange={e => setCity(e.target.value)} placeholder="Tỉnh / Thành phố" style={{ width: '100%', padding: '10px', marginBottom: '15px', border: '1px solid #ccc', borderRadius: '4px' }} />
@@ -300,7 +434,7 @@ const Cart = () => {
                         
                         {paymentMethod === 'ONLINE' && (
                             <div style={{ marginTop: '15px', padding: '15px', background: '#f8f9fa', borderRadius: '8px', textAlign: 'center', border: '1px solid #ddd' }}>
-                                <img src="https://placehold.co/150x150?text=QR+CODE" alt="Mã QR Thanh Toán" style={{ width: '150px', height: '150px', objectFit: 'cover' }} />
+                                <img src="./src/assets/qr-code.png" alt="Mã QR Thanh Toán" style={{ width: '150px', height: '150px', objectFit: 'cover' }} />
                                 <p style={{ fontSize: '13px', color: '#555', marginTop: '10px' }}>Vui lòng quét mã QR để thanh toán. Hệ thống sẽ xác nhận tự động.</p>
                             </div>
                         )}
@@ -311,6 +445,217 @@ const Cart = () => {
                     </button>
                 </div>
             </div>
+
+            {/* Address Selection Modal */}
+            {showAddressModal && (
+                <div style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    background: 'rgba(0,0,0,0.5)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: 1000
+                }}>
+                    <div style={{
+                        background: 'white',
+                        borderRadius: '8px',
+                        padding: '30px',
+                        maxWidth: '500px',
+                        width: '90%',
+                        maxHeight: '80vh',
+                        overflowY: 'auto'
+                    }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                            <h3 style={{ margin: 0 }}>Chọn địa chỉ giao hàng</h3>
+                            <button 
+                                onClick={() => {
+                                    setShowAddressModal(false);
+                                    setIsCreatingNewAddress(false);
+                                }}
+                                style={{
+                                    background: 'none',
+                                    border: 'none',
+                                    fontSize: '24px',
+                                    cursor: 'pointer',
+                                    color: '#999'
+                                }}
+                            >
+                                ×
+                            </button>
+                        </div>
+
+                        {!isCreatingNewAddress ? (
+                            <>
+                                {userAddresses.length > 0 && (
+                                    <div style={{ marginBottom: '20px' }}>
+                                        <h4 style={{ marginBottom: '15px', color: '#333' }}>Địa chỉ đã lưu</h4>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                            {userAddresses.map(addr => (
+                                                <div 
+                                                    key={addr.id}
+                                                    onClick={() => handleSelectAddress(addr.id)}
+                                                    style={{
+                                                        padding: '15px',
+                                                        border: selectedAddressId === addr.id ? '2px solid var(--primary-color)' : '1px solid #ddd',
+                                                        borderRadius: '4px',
+                                                        cursor: 'pointer',
+                                                        background: selectedAddressId === addr.id ? '#f0f8ff' : '#fff',
+                                                        transition: 'all 0.3s'
+                                                    }}
+                                                >
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                                        <div style={{ flex: 1 }}>
+                                                            <div style={{ fontWeight: 'bold', marginBottom: '5px' }}>
+                                                                {addr.receiver_name} | {addr.phone}
+                                                            </div>
+                                                            <div style={{ fontSize: '13px', color: '#666' }}>
+                                                                {addr.address_line}, {addr.city}
+                                                            </div>
+                                                        </div>
+                                                        {addr.is_default && (
+                                                            <span style={{
+                                                                background: '#4caf50',
+                                                                color: 'white',
+                                                                padding: '3px 8px',
+                                                                borderRadius: '3px',
+                                                                fontSize: '11px',
+                                                                fontWeight: 'bold'
+                                                            }}>
+                                                                Mặc định
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                        <hr style={{ margin: '20px 0', borderColor: '#ddd' }} />
+                                    </div>
+                                )}
+
+                                <button 
+                                    onClick={() => setIsCreatingNewAddress(true)}
+                                    style={{
+                                        width: '100%',
+                                        padding: '12px',
+                                        background: 'var(--primary-color)',
+                                        color: 'white',
+                                        border: 'none',
+                                        borderRadius: '4px',
+                                        cursor: 'pointer',
+                                        fontWeight: 'bold',
+                                        marginBottom: '10px'
+                                    }}
+                                >
+                                    <i className="fas fa-plus"></i> Thêm địa chỉ mới
+                                </button>
+
+                                <button 
+                                    onClick={() => {
+                                        setShowAddressModal(false);
+                                        setIsCreatingNewAddress(false);
+                                    }}
+                                    style={{
+                                        width: '100%',
+                                        padding: '12px',
+                                        background: '#f0f0f0',
+                                        color: '#333',
+                                        border: 'none',
+                                        borderRadius: '4px',
+                                        cursor: 'pointer',
+                                        fontWeight: 'bold'
+                                    }}
+                                >
+                                    Hủy
+                                </button>
+                            </>
+                        ) : (
+                            <form onSubmit={handleAddNewAddress}>
+                                <h4 style={{ marginBottom: '15px', color: '#333' }}>Thêm địa chỉ mới</h4>
+                                
+                                <input 
+                                    type="text"
+                                    placeholder="Tên người nhận"
+                                    value={newAddressForm.receiver_name}
+                                    onChange={e => setNewAddressForm({ ...newAddressForm, receiver_name: e.target.value })}
+                                    style={{ width: '100%', padding: '10px', marginBottom: '10px', border: '1px solid #ccc', borderRadius: '4px', boxSizing: 'border-box' }}
+                                />
+                                
+                                <input 
+                                    type="tel"
+                                    placeholder="Số điện thoại"
+                                    value={newAddressForm.phone}
+                                    onChange={e => setNewAddressForm({ ...newAddressForm, phone: e.target.value })}
+                                    style={{ width: '100%', padding: '10px', marginBottom: '10px', border: '1px solid #ccc', borderRadius: '4px', boxSizing: 'border-box' }}
+                                />
+                                
+                                <input 
+                                    type="text"
+                                    placeholder="Tỉnh / Thành phố"
+                                    value={newAddressForm.city}
+                                    onChange={e => setNewAddressForm({ ...newAddressForm, city: e.target.value })}
+                                    style={{ width: '100%', padding: '10px', marginBottom: '10px', border: '1px solid #ccc', borderRadius: '4px', boxSizing: 'border-box' }}
+                                />
+                                
+                                <textarea 
+                                    placeholder="Địa chỉ chi tiết (Số nhà, đường...)"
+                                    value={newAddressForm.address_line}
+                                    onChange={e => setNewAddressForm({ ...newAddressForm, address_line: e.target.value })}
+                                    style={{ width: '100%', padding: '10px', marginBottom: '15px', border: '1px solid #ccc', borderRadius: '4px', boxSizing: 'border-box', height: '60px' }}
+                                />
+
+                                <button 
+                                    type="submit"
+                                    style={{
+                                        width: '100%',
+                                        padding: '12px',
+                                        background: '#4caf50',
+                                        color: 'white',
+                                        border: 'none',
+                                        borderRadius: '4px',
+                                        cursor: 'pointer',
+                                        fontWeight: 'bold',
+                                        marginBottom: '10px'
+                                    }}
+                                >
+                                    <i className="fas fa-check"></i> Lưu địa chỉ
+                                </button>
+
+                                <button 
+                                    type="button"
+                                    onClick={() => {
+                                        setIsCreatingNewAddress(false);
+                                        setNewAddressForm({
+                                            receiver_name: '',
+                                            phone: '',
+                                            address_line: '',
+                                            city: '',
+                                            district: '',
+                                            ward: '',
+                                            is_default: false
+                                        });
+                                    }}
+                                    style={{
+                                        width: '100%',
+                                        padding: '12px',
+                                        background: '#f0f0f0',
+                                        color: '#333',
+                                        border: 'none',
+                                        borderRadius: '4px',
+                                        cursor: 'pointer',
+                                        fontWeight: 'bold'
+                                    }}
+                                >
+                                    Hủy
+                                </button>
+                            </form>
+                        )}
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

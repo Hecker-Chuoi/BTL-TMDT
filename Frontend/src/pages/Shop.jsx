@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { getDB, getMainImage, formatMoney, addToCart, dbBrands, getFlashSaleDiscountForProduct } from '../utils/mockData';
+import { getDB, getMainImage, formatMoney, addToCart, dbBrands, getFlashSaleDiscountForProduct, getItemsPerPage } from '../utils/mockData';
 
 const Shop = () => {
     const [searchParams] = useSearchParams();
@@ -15,11 +15,15 @@ const Shop = () => {
     
     // Pagination state
     const [currentPage, setCurrentPage] = useState(1);
-    const itemsPerPage = 6;
+    const [itemsPerPage, setItemsPerPageState] = useState(6);
 
     useEffect(() => {
         const dbData = getDB();
         setAllProducts(dbData);
+        
+        // Load itemsPerPage from settings
+        const storedItemsPerPage = getItemsPerPage();
+        setItemsPerPageState(storedItemsPerPage);
         
         // Handle initial category from URL (e.g. ?cat=1)
         const catQ = searchParams.get('cat');
@@ -145,7 +149,7 @@ const Shop = () => {
 
             <section className="product-area">
                 <div className="top-bar">
-                    <div id="result-count">Đang hiển thị {filteredProducts.length} sản phẩm</div>
+                    <div id="result-count">Đang hiển thị {currentProducts.length} trên {filteredProducts.length} sản phẩm</div>
                     <select id="sort-select" value={sortOption} onChange={e => setSortOption(e.target.value)} style={{ padding: '5px', borderRadius: '4px' }}>
                         <option value="default">Sắp xếp: Mặc định</option>
                         <option value="price-asc">Giá: Thấp đến Cao</option>

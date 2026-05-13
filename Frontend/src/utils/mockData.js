@@ -494,6 +494,185 @@ export const getSearchSuggestions = (searchQuery, limit = 3) => {
     };
 };
 
+// ===== UI Configuration Management =====
+export const getItemsPerPage = () => {
+    try {
+        const stored = localStorage.getItem('itemsPerPage');
+        return stored ? parseInt(stored) : 6;
+    } catch {
+        return 6;
+    }
+};
+
+export const setItemsPerPage = (itemsPerPage) => {
+    localStorage.setItem('itemsPerPage', String(itemsPerPage));
+};
+
+export const getBannerSettings = () => {
+    try {
+        const stored = localStorage.getItem('bannerSettings');
+        if (!stored) {
+            // Default banners - using placeholder URLs
+            const defaultBanners = [
+                { id: 1, image_url: 'https://placehold.co/1200x400/0056b3/white?text=Banner+1', product_id: 1, display_order: 1 },
+                { id: 2, image_url: 'https://placehold.co/1200x400/ff4757/white?text=Banner+2', product_id: 3, display_order: 2 },
+                { id: 3, image_url: 'https://placehold.co/1200x400/2d3436/white?text=Banner+3', product_id: 1, display_order: 3 }
+            ];
+            localStorage.setItem('bannerSettings', JSON.stringify(defaultBanners));
+            return defaultBanners;
+        }
+        return JSON.parse(stored);
+    } catch {
+        return [];
+    }
+};
+
+export const setBannerSettings = (bannerSettings) => {
+    localStorage.setItem('bannerSettings', JSON.stringify(bannerSettings));
+};
+
+export const getFlashSaleItemsPerPage = () => {
+    try {
+        const stored = localStorage.getItem('flashSaleItemsPerPage');
+        return stored ? parseInt(stored) : 4;
+    } catch {
+        return 4;
+    }
+};
+
+export const setFlashSaleItemsPerPage = (itemsPerPage) => {
+    localStorage.setItem('flashSaleItemsPerPage', String(itemsPerPage));
+};
+
+// ===== User Addresses Management =====
+export const getUserAddresses = (userId) => {
+    try {
+        const allAddresses = JSON.parse(localStorage.getItem('userAddresses')) || {};
+        return allAddresses[userId] || [];
+    } catch {
+        return [];
+    }
+};
+
+export const setUserAddresses = (userId, addresses) => {
+    const allAddresses = JSON.parse(localStorage.getItem('userAddresses')) || {};
+    allAddresses[userId] = addresses;
+    localStorage.setItem('userAddresses', JSON.stringify(allAddresses));
+};
+
+export const addAddress = (userId, address) => {
+    const addresses = getUserAddresses(userId);
+    const newAddress = {
+        id: Date.now(),
+        user_id: userId,
+        receiver_name: address.receiver_name,
+        phone: address.phone,
+        address_line: address.address_line,
+        city: address.city,
+        district: address.district,
+        ward: address.ward,
+        is_default: addresses.length === 0 ? true : address.is_default || false, // First address is default
+        created_at: new Date().toISOString()
+    };
+    
+    // If this is default, remove default from others
+    if (newAddress.is_default) {
+        addresses.forEach(a => a.is_default = false);
+    }
+    
+    addresses.push(newAddress);
+    setUserAddresses(userId, addresses);
+    return newAddress;
+};
+
+export const updateAddress = (userId, addressId, addressData) => {
+    const addresses = getUserAddresses(userId);
+    const index = addresses.findIndex(a => a.id === addressId);
+    
+    if (index === -1) return null;
+    
+    const updatedAddress = {
+        ...addresses[index],
+        ...addressData,
+        id: addressId,
+        user_id: userId,
+        created_at: addresses[index].created_at
+    };
+    
+    // If setting as default, remove default from others
+    if (updatedAddress.is_default) {
+        addresses.forEach((a, i) => {
+            if (i !== index) a.is_default = false;
+        });
+    }
+    
+    addresses[index] = updatedAddress;
+    setUserAddresses(userId, addresses);
+    return updatedAddress;
+};
+
+export const deleteAddress = (userId, addressId) => {
+    const addresses = getUserAddresses(userId);
+    const filtered = addresses.filter(a => a.id !== addressId);
+    
+    // If deleted the default, set first as default
+    if (filtered.length > 0 && !filtered.some(a => a.is_default)) {
+        filtered[0].is_default = true;
+    }
+    
+    setUserAddresses(userId, filtered);
+    return true;
+};
+
+export const setDefaultAddress = (userId, addressId) => {
+    const addresses = getUserAddresses(userId);
+    addresses.forEach(a => a.is_default = a.id === addressId);
+    setUserAddresses(userId, addresses);
+};
+
+export const getDefaultAddress = (userId) => {
+    const addresses = getUserAddresses(userId);
+    return addresses.find(a => a.is_default) || addresses[0] || null;
+};
+
+// ===== User Profile Management =====
+export const updateUserProfile = (userId, profileData) => {
+    let users = JSON.parse(localStorage.getItem('users')) || [];
+    const userIndex = users.findIndex(u => u.id === userId);
+    
+    if (userIndex === -1) return null;
+    
+    users[userIndex] = {
+        ...users[userIndex],
+        ...profileData,
+        id: userId
+    };
+    
+    localStorage.setItem('users', JSON.stringify(users));
+    
+    // Update sessionStorage if it's the current user
+    const currentUser = JSON.parse(sessionStorage.getItem('currentUser'));
+    if (currentUser && currentUser.email === users[userIndex].email) {
+        sessionStorage.setItem('currentUser', JSON.stringify({
+            name: users[userIndex].full_name,
+            email: users[userIndex].email,
+            role: users[userIndex].role
+        }));
+    }
+    
+    return users[userIndex];
+};
+
+export const getUserWithEmail = (email) => {
+    const users = JSON.parse(localStorage.getItem('users')) || [];
+    return users.find(u => u.email === email);
+};
+
+export const getUserById = (userId) => {
+    const users = JSON.parse(localStorage.getItem('users')) || [];
+    return users.find(u => u.id === userId);
+};
+
 const defaultUsers = [
     { id: 101, email: "khachhang1@gmail.com", password: "123", full_name: "Khách Hàng Vip", role: "USER", status: "ACTIVE" },
     { id: 102, email: "khachhang2@gmail.com", password: "123", full_name: "Thượng Đế Mua Hàng", role: "USER", status: "ACTIVE" },

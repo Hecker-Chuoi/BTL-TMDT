@@ -8,6 +8,7 @@ import ProductDetail from '../pages/ProductDetail';
 import Cart from '../pages/Cart';
 import Login from '../pages/Login';
 import Admin from '../pages/Admin';
+import Profile from '../pages/Profile';
 
 const AppRoutes = () => {
   return (
@@ -19,6 +20,7 @@ const AppRoutes = () => {
           <Route path="product/:id" element={<ProductDetail />} />
           <Route path="cart" element={<Cart />} />
           <Route path="login" element={<Login />} />
+          <Route path="profile" element={<Profile />} />
         </Route>
         {/* Route quản trị có thể tách Layout riêng nếu cần sau này */}
         <Route path="/admin" element={<Admin />} />

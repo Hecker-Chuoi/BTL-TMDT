@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getDB, setDB, getMainImage, formatMoney, dbBrands, getFlashSale, setFlashSale } from '../utils/mockData';
+import { getDB, setDB, getMainImage, formatMoney, dbBrands, getFlashSale, setFlashSale, getBannerSettings, setBannerSettings, getItemsPerPage, setItemsPerPage, getFlashSaleItemsPerPage, setFlashSaleItemsPerPage } from '../utils/mockData';
 import { useNavigate } from 'react-router-dom';
 
 const Admin = () => {
@@ -19,6 +19,17 @@ const Admin = () => {
     const [orders, setOrders] = useState([]);
     const [customers, setCustomers] = useState([]);
     const [flashSale, setFlashSaleState] = useState(null);
+
+    // Interface settings state
+    const [itemsPerPageValue, setItemsPerPageValue] = useState('6');
+    const [flashSaleItemsPerPageValue, setFlashSaleItemsPerPageValue] = useState('4');
+    const [bannerSettings, setBannerSettingsState] = useState([]);
+    const [bannerFormData, setBannerFormData] = useState({
+        image_url: '',
+        product_id: '',
+        display_order: ''
+    });
+    const [editingBannerId, setEditingBannerId] = useState(null);
 
     // Flash sale form state
     const [flashSaleDiscountPercent, setFlashSaleDiscountPercent] = useState('20');
@@ -69,6 +80,16 @@ const Admin = () => {
         setFlashSaleStartTime(flashSaleData.start_time ? flashSaleData.start_time.substring(0, 16) : '');
         setFlashSaleEndTime(flashSaleData.end_time ? flashSaleData.end_time.substring(0, 16) : '');
         setFlashSaleSelectedProducts(flashSaleData.product_ids || []);
+
+        // Load UI settings
+        const itemsPerPage = getItemsPerPage();
+        setItemsPerPageValue(String(itemsPerPage));
+        
+        const flashSaleItemsPerPage = getFlashSaleItemsPerPage();
+        setFlashSaleItemsPerPageValue(String(flashSaleItemsPerPage));
+        
+        const banners = getBannerSettings();
+        setBannerSettingsState(banners);
     }, [navigate]);
 
     const handleLogout = () => {
@@ -146,6 +167,93 @@ const Admin = () => {
         setFlashSale(updatedFlashSale);
         setFlashSaleState(updatedFlashSale);
         alert("Cập nhật Flash Sale thành công!");
+    };
+
+    // Interface Management Handlers
+    const handleItemsPerPageChange = (e) => {
+        e.preventDefault();
+        const value = parseInt(itemsPerPageValue);
+        if (value < 1) {
+            alert("Số lượng sản phẩm phải lớn hơn 0!");
+            return;
+        }
+        setItemsPerPage(value);
+        alert("Cập nhật số sản phẩm trên trang thành công!");
+    };
+
+    const handleFlashSaleItemsPerPageChange = (e) => {
+        e.preventDefault();
+        const value = parseInt(flashSaleItemsPerPageValue);
+        if (value < 1) {
+            alert("Số lượng sản phẩm flash sale phải lớn hơn 0!");
+            return;
+        }
+        setFlashSaleItemsPerPage(value);
+        alert("Cập nhật số sản phẩm flash sale trên trang thành công!");
+    };
+
+    const handleBannerImageChange = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            setBannerFormData({ ...bannerFormData, image_url: reader.result });
+        };
+        reader.readAsDataURL(file);
+    };
+
+    const handleBannerFormSubmit = (e) => {
+        e.preventDefault();
+        
+        if (!bannerFormData.image_url || !bannerFormData.product_id || !bannerFormData.display_order) {
+            alert("Vui lòng điền đầy đủ thông tin banner!");
+            return;
+        }
+
+        let updatedBanners;
+        if (editingBannerId) {
+            updatedBanners = bannerSettings.map(b => 
+                b.id === editingBannerId 
+                    ? { ...b, ...bannerFormData, product_id: parseInt(bannerFormData.product_id), display_order: parseInt(bannerFormData.display_order) }
+                    : b
+            );
+            alert("Cập nhật banner thành công!");
+        } else {
+            const newBanner = {
+                id: Date.now(),
+                image_url: bannerFormData.image_url,
+                product_id: parseInt(bannerFormData.product_id),
+                display_order: parseInt(bannerFormData.display_order)
+            };
+            updatedBanners = [...bannerSettings, newBanner];
+            alert("Thêm banner thành công!");
+        }
+
+        // Sort by display_order
+        updatedBanners.sort((a, b) => a.display_order - b.display_order);
+        
+        setBannerSettings(updatedBanners);
+        setBannerSettingsState(updatedBanners);
+        setBannerFormData({ image_url: '', product_id: '', display_order: '' });
+        setEditingBannerId(null);
+    };
+
+    const handleEditBanner = (banner) => {
+        setBannerFormData({
+            image_url: banner.image_url,
+            product_id: String(banner.product_id),
+            display_order: String(banner.display_order)
+        });
+        setEditingBannerId(banner.id);
+    };
+
+    const handleDeleteBanner = (bannerId) => {
+        if (window.confirm("Bạn có chắc chắn muốn xóa banner này?")) {
+            const updated = bannerSettings.filter(b => b.id !== bannerId);
+            setBannerSettingsState(updated);
+            setBannerSettings(updated);
+            alert("Xóa banner thành công!");
+        }
     };
 
     const handleImageChange = (e) => {
@@ -254,6 +362,7 @@ const Admin = () => {
                 <ul className="admin-nav-menu">
                     <li><a href="#" className={`admin-nav-item ${currentTab === 'products' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setCurrentTab('products'); }} style={{ whiteSpace: 'nowrap' }}><i className="fas fa-box"></i>{isSidebarOpen && ' Quản lý Sản phẩm'}</a></li>
                     <li><a href="#" className={`admin-nav-item ${currentTab === 'flashsale' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setCurrentTab('flashsale'); }} style={{ whiteSpace: 'nowrap' }}><i className="fas fa-bolt"></i>{isSidebarOpen && ' Flash Sale'}</a></li>
+                    <li><a href="#" className={`admin-nav-item ${currentTab === 'interface' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setCurrentTab('interface'); }} style={{ whiteSpace: 'nowrap' }}><i className="fas fa-sliders-h"></i>{isSidebarOpen && ' Quản lý Giao diện'}</a></li>
                     <li><a href="#" className={`admin-nav-item ${currentTab === 'orders' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setCurrentTab('orders'); }} style={{ whiteSpace: 'nowrap' }}><i className="fas fa-shopping-cart"></i>{isSidebarOpen && ' Quản lý Đơn hàng'}</a></li>
                     <li><a href="#" className={`admin-nav-item ${currentTab === 'customers' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setCurrentTab('customers'); }} style={{ whiteSpace: 'nowrap' }}><i className="fas fa-users"></i>{isSidebarOpen && ' Khách hàng'}</a></li>
                 </ul>
@@ -429,6 +538,184 @@ const Admin = () => {
                                 {customers.length === 0 && <tr><td colSpan="6" style={{ textAlign: 'center' }}>Chưa có khách hàng nào</td></tr>}
                             </tbody>
                         </table>
+                    </div>
+                </section>
+                )}
+
+                {currentTab === 'interface' && (
+                <section className="admin-content-area">
+                    <div className="admin-page-title">
+                        <h2>Quản lý Giao diện</h2>
+                    </div>
+
+                    {/* Items Per Page Section */}
+                    <div style={{ background: 'white', padding: '30px', borderRadius: '8px', boxShadow: '0 2px 5px rgba(0,0,0,0.1)', marginBottom: '30px' }}>
+                        <h3 style={{ marginTop: 0, marginBottom: '20px' }}>
+                            <i className="fas fa-list"></i> Số lượng sản phẩm trên mỗi trang
+                        </h3>
+                        <form onSubmit={handleItemsPerPageChange}>
+                            <div className="form-group" style={{ display: 'flex', gap: '10px', alignItems: 'flex-end', marginBottom: '20px' }}>
+                                <div style={{ flex: '0 0 200px' }}>
+                                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>Số lượng sản phẩm (itemsPerPage):</label>
+                                    <input 
+                                        type="number" 
+                                        min="1"
+                                        max="50"
+                                        value={itemsPerPageValue} 
+                                        onChange={e => setItemsPerPageValue(e.target.value)} 
+                                        style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+                                        required 
+                                    />
+                                    <small style={{ display: 'block', marginTop: '4px', color: '#666' }}>Hiện tại: {itemsPerPageValue} sản phẩm/trang</small>
+                                </div>
+                                <button type="submit" className="btn-submit" style={{ padding: '8px 20px' }}>
+                                    <i className="fas fa-save"></i> Cập nhật
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+
+                    {/* Flash Sale Items Per Page Section */}
+                    <div style={{ background: 'white', padding: '30px', borderRadius: '8px', boxShadow: '0 2px 5px rgba(0,0,0,0.1)', marginBottom: '30px' }}>
+                        <h3 style={{ marginTop: 0, marginBottom: '20px' }}>
+                            <i className="fas fa-bolt" style={{ color: '#e74c3c' }}></i> Số lượng sản phẩm Flash Sale trên mỗi trang
+                        </h3>
+                        <form onSubmit={handleFlashSaleItemsPerPageChange}>
+                            <div className="form-group" style={{ display: 'flex', gap: '10px', alignItems: 'flex-end', marginBottom: '20px' }}>
+                                <div style={{ flex: '0 0 200px' }}>
+                                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>Số lượng sản phẩm:</label>
+                                    <input 
+                                        type="number" 
+                                        min="1"
+                                        max="50"
+                                        value={flashSaleItemsPerPageValue} 
+                                        onChange={e => setFlashSaleItemsPerPageValue(e.target.value)} 
+                                        style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+                                        required 
+                                    />
+                                    <small style={{ display: 'block', marginTop: '4px', color: '#666' }}>Hiện tại: {flashSaleItemsPerPageValue} sản phẩm/trang</small>
+                                </div>
+                                <button type="submit" className="btn-submit" style={{ padding: '8px 20px' }}>
+                                    <i className="fas fa-save"></i> Cập nhật
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+
+                    {/* Banner Management Section */}
+                    <div style={{ background: 'white', padding: '30px', borderRadius: '8px', boxShadow: '0 2px 5px rgba(0,0,0,0.1)' }}>
+                        <h3 style={{ marginTop: 0, marginBottom: '20px' }}>
+                            <i className="fas fa-image"></i> Quản lý Banner
+                        </h3>
+
+                        {/* Banner Form */}
+                        <div style={{ background: '#f9f9f9', padding: '20px', borderRadius: '6px', marginBottom: '30px' }}>
+                            <h4 style={{ marginTop: 0 }}>{editingBannerId ? 'Sửa Banner' : 'Thêm Banner Mới'}</h4>
+                            <form onSubmit={handleBannerFormSubmit}>
+                                <div className="form-group">
+                                    <label>Hình ảnh Banner:</label>
+                                    <input 
+                                        type="file" 
+                                        accept="image/*"
+                                        onChange={handleBannerImageChange}
+                                        style={{ width: '100%', padding: '6px 0', cursor: 'pointer', marginBottom: '8px' }}
+                                    />
+                                    {bannerFormData.image_url && (
+                                        <div style={{ marginTop: '8px', textAlign: 'center', border: '1px dashed #ccc', borderRadius: '6px', padding: '8px' }}>
+                                            <img src={bannerFormData.image_url} alt="preview" style={{ maxWidth: '100%', maxHeight: '150px', objectFit: 'contain', borderRadius: '4px' }} />
+                                            <p style={{ fontSize: '12px', color: '#888', marginTop: '4px' }}>Xem trước</p>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="form-group">
+                                    <label>Chọn sản phẩm (liên kết):</label>
+                                    <select 
+                                        value={bannerFormData.product_id} 
+                                        onChange={e => setBannerFormData({ ...bannerFormData, product_id: e.target.value })}
+                                        style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+                                        required
+                                    >
+                                        <option value="">-- Chọn sản phẩm --</option>
+                                        {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                                    </select>
+                                </div>
+
+                                <div className="form-group">
+                                    <label>Thứ tự hiển thị:</label>
+                                    <input 
+                                        type="number" 
+                                        min="1"
+                                        value={bannerFormData.display_order} 
+                                        onChange={e => setBannerFormData({ ...bannerFormData, display_order: e.target.value })}
+                                        placeholder="Vd: 1, 2, 3..."
+                                        style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+                                        required
+                                    />
+                                </div>
+
+                                <div style={{ display: 'flex', gap: '10px' }}>
+                                    <button type="submit" className="btn-submit" style={{ padding: '10px 20px' }}>
+                                        <i className="fas fa-save"></i> {editingBannerId ? 'Cập nhật Banner' : 'Thêm Banner'}
+                                    </button>
+                                    {editingBannerId && (
+                                        <button 
+                                            type="button" 
+                                            className="action-btn btn-cancel" 
+                                            onClick={() => {
+                                                setEditingBannerId(null);
+                                                setBannerFormData({ image_url: '', product_id: '', display_order: '' });
+                                            }}
+                                            style={{ padding: '10px 20px' }}
+                                        >
+                                            <i className="fas fa-times"></i> Hủy sửa
+                                        </button>
+                                    )}
+                                </div>
+                            </form>
+                        </div>
+
+                        {/* Banners List */}
+                        <div>
+                            <h4>Danh sách Banner hiện tại:</h4>
+                            {bannerSettings.length === 0 ? (
+                                <p style={{ color: '#999', fontStyle: 'italic' }}>Chưa có banner nào. Hãy thêm banner mới.</p>
+                            ) : (
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '20px' }}>
+                                    {bannerSettings.map(banner => (
+                                        <div key={banner.id} style={{ border: '1px solid #ddd', borderRadius: '6px', overflow: 'hidden', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
+                                            <img src={banner.image_url} alt="banner" style={{ width: '100%', height: '150px', objectFit: 'cover' }} />
+                                            <div style={{ padding: '12px' }}>
+                                                <div style={{ marginBottom: '8px' }}>
+                                                    <small style={{ display: 'block', color: '#666' }}>Sản phẩm:</small>
+                                                    <strong>{products.find(p => p.id === banner.product_id)?.name || 'N/A'}</strong>
+                                                </div>
+                                                <div style={{ marginBottom: '12px' }}>
+                                                    <small style={{ display: 'block', color: '#666' }}>Thứ tự:</small>
+                                                    <strong>{banner.display_order}</strong>
+                                                </div>
+                                                <div style={{ display: 'flex', gap: '8px' }}>
+                                                    <button 
+                                                        onClick={() => handleEditBanner(banner)}
+                                                        className="action-btn btn-edit" 
+                                                        style={{ flex: 1, padding: '8px', fontSize: '12px' }}
+                                                    >
+                                                        <i className="fas fa-edit"></i> Sửa
+                                                    </button>
+                                                    <button 
+                                                        onClick={() => handleDeleteBanner(banner.id)}
+                                                        className="action-btn btn-delete" 
+                                                        style={{ flex: 1, padding: '8px', fontSize: '12px' }}
+                                                    >
+                                                        <i className="fas fa-trash"></i> Xóa
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </section>
                 )}

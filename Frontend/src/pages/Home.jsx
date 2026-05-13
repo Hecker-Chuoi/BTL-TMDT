@@ -1,17 +1,29 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { getDB, getMainImage, formatMoney, addToCart, getFlashSale, getFlashSaleDiscountForProduct } from '../utils/mockData';
+import { getDB, getMainImage, formatMoney, addToCart, getFlashSale, getFlashSaleDiscountForProduct, getBannerSettings, getFlashSaleItemsPerPage } from '../utils/mockData';
 
 const Home = () => {
   const [products, setProducts] = useState([]);
   const [currentSlide, setCurrentSlide] = useState(0);
   const [flashSale, setFlashSaleData] = useState(null);
   const [countdown, setCountdown] = useState('');
+  const [banners, setBanners] = useState([]);
+  const [currentFlashSalePage, setCurrentFlashSalePage] = useState(0);
+  const [flashSaleItemsPerPage, setFlashSaleItemsPerPage] = useState(4);
 
+  // Load initial data and countdown
   useEffect(() => {
     // Load flash sale config
     const flashSaleConfig = getFlashSale();
     setFlashSaleData(flashSaleConfig);
+
+    // Load banner settings
+    const bannerSettings = getBannerSettings();
+    setBanners(bannerSettings);
+
+    // Load flash sale items per page setting
+    const itemsPerPage = getFlashSaleItemsPerPage();
+    setFlashSaleItemsPerPage(itemsPerPage);
 
     // Update countdown
     const updateCountdown = () => {
@@ -36,36 +48,39 @@ const Home = () => {
     return () => clearInterval(countdownInterval);
   }, []);
 
-  const slides = [
-    "https://placehold.co/1200x400/0056b3/white?text=Back+to+School+-+Giam+Gia+30%25",
-    "https://placehold.co/1200x400/ff4757/white?text=Flash+Sale+Cuoi+Tuan+-+Giam+50%25",
-    "https://placehold.co/1200x400/2d3436/white?text=San+Pham+Moi+-+Dat+Truoc+Ngay"
-  ];
-
+  // Load products and setup auto-slide
   useEffect(() => {
-    // Load products
     const dbData = getDB();
     setProducts(dbData);
 
     // Auto-slide
     const interval = setInterval(() => {
-      setCurrentSlide(prev => (prev + 1) % slides.length);
+      setCurrentSlide(prev => (prev + 1) % (banners.length || 1));
     }, 4000);
     return () => clearInterval(interval);
-  }, [slides.length]);
+  }, [banners.length]);
 
   const moveSlide = (direction) => {
     setCurrentSlide(prev => {
       let next = prev + direction;
-      if (next < 0) next = slides.length - 1;
-      if (next >= slides.length) next = 0;
+      if (next < 0) next = banners.length - 1;
+      if (next >= banners.length) next = 0;
       return next;
     });
   };
 
-  // Split data
-  const flashSaleData = products.slice(0, 2); // get first 2 for flash sale
-  
+  const moveFlashSalePage = (direction) => {
+    if (!flashSale || !flashSale.product_ids || flashSale.product_ids.length === 0) return;
+    
+    const totalPages = Math.ceil(flashSale.product_ids.length / flashSaleItemsPerPage);
+    setCurrentFlashSalePage(prev => {
+      let next = prev + direction;
+      if (next < 0) next = totalPages - 1;
+      if (next >= totalPages) next = 0;
+      return next;
+    });
+  };
+
   // Get average rating for a product
   const getAverageRating = (productId) => {
     const allReviews = JSON.parse(localStorage.getItem('productReviews')) || [];
@@ -158,20 +173,33 @@ const Home = () => {
 
   return (
     <div>
+      {/* Banner Carousel */}
       <section className="hero-slider container">
         <div className="slider-wrapper" style={{ transform: `translateX(-${currentSlide * 100}%)` }}>
-          {slides.map((imgUrl, index) => (
-            <div className="slide" key={index}>
-              <img src={imgUrl} alt={`Banner ${index + 1}`} />
+          {banners.length > 0 ? (
+            banners.map((banner, index) => (
+              <Link 
+                key={banner.id || index} 
+                to={`/product/${banner.product_id}`}
+                style={{ display: 'block', textDecoration: 'none', minWidth: '100%' }}
+              >
+                <div className="slide">
+                  <img src={banner.image_url} alt={`Banner ${index + 1}`} style={{ width: '100%', height: 'auto', display: 'block' }} />
+                </div>
+              </Link>
+            ))
+          ) : (
+            <div className="slide">
+              <img src="https://placehold.co/1200x400/ddd/999?text=No+Banners" alt="No Banners" />
             </div>
-          ))}
+          )}
         </div>
         
         <button className="slider-btn prev" onClick={() => moveSlide(-1)}><i className="fas fa-chevron-left"></i></button>
         <button className="slider-btn next" onClick={() => moveSlide(1)}><i className="fas fa-chevron-right"></i></button>
         
         <div className="slider-dots">
-          {slides.map((_, index) => (
+          {banners.map((_, index) => (
             <div 
               key={index} 
               className={`dot ${currentSlide === index ? 'active' : ''}`}
@@ -192,20 +220,6 @@ const Home = () => {
         </Link>
       </section>
 
-      <section className="flash-sale container">
-        <h2 className="section-title"><i className="fas fa-bolt" style={{ color: 'red' }}></i> Flash Sale</h2>
-        <div className="countdown" id="countdown" style={{ color: '#e74c3c', fontWeight: 'bold', fontSize: '18px' }}>{countdown}</div>
-        <div className="product-grid">
-          {flashSale && flashSale.product_ids.length > 0 ? 
-            products
-              .filter(p => flashSale.product_ids.includes(p.id))
-              .map(p => <ProductCard key={p.id} product={p} />) 
-            : 
-            <p>Đang tải dữ liệu...</p>
-          }
-        </div>
-      </section>
-
       <section className="container">
         <h2 className="section-title">Laptop Nổi Bật</h2>
         <div className="product-grid">
@@ -218,6 +232,63 @@ const Home = () => {
           </Link>
         </div>
       </section>
+
+      <section className="flash-sale container">
+        <h2 className="section-title"><i className="fas fa-bolt" style={{ color: 'red' }}></i> Flash Sale</h2>
+        <div className="countdown" id="countdown" style={{ color: '#e74c3c', fontWeight: 'bold', fontSize: '18px' }}>{countdown}</div>
+        
+        <div style={{ position: 'relative', marginTop: '20px' }}>
+          <div className="product-grid">
+            {flashSale && flashSale.product_ids && flashSale.product_ids.length > 0 ? 
+              products
+                .filter(p => flashSale.product_ids.includes(p.id))
+                .slice(currentFlashSalePage * flashSaleItemsPerPage, (currentFlashSalePage + 1) * flashSaleItemsPerPage)
+                .map(p => <ProductCard key={p.id} product={p} />) 
+              : 
+              <p>Đang tải dữ liệu...</p>
+            }
+          </div>
+
+          {flashSale && flashSale.product_ids && flashSale.product_ids.length > flashSaleItemsPerPage && (
+            <>
+              <button 
+                className="slider-btn prev"
+                onClick={() => moveFlashSalePage(-1)}
+                style={{
+                  position: 'absolute',
+                  left: '10px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  zIndex: 10
+                }}
+              >
+                <i className="fas fa-chevron-left"></i>
+              </button>
+              <button 
+                className="slider-btn next"
+                onClick={() => moveFlashSalePage(1)}
+                style={{
+                  position: 'absolute',
+                  right: '10px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  zIndex: 10
+                }}
+              >
+                <i className="fas fa-chevron-right"></i>
+              </button>
+
+              {/* <div style={{ textAlign: 'center', marginTop: '20px' }}>
+                <span style={{ color: '#666', fontSize: '14px' }}>
+                  Trang {currentFlashSalePage + 1} / {Math.ceil(flashSale.product_ids.length / flashSaleItemsPerPage)}
+                </span>
+              </div> */}
+            </>
+          )}
+        </div>
+      </section>
+
+      
     </div>
   );
 };

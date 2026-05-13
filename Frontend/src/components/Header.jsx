@@ -218,10 +218,10 @@ const Header = () => {
           </Link>
           {currentUser ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-                  <span style={{ fontWeight: 'bold', fontSize: '14px', color: 'var(--primary-color)' }}>
-                      <i className="fas fa-user-circle" style={{ marginRight: '5px' }}></i>
+                  <Link to="/profile" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '5px', fontWeight: 'bold', fontSize: '14px', color: 'var(--primary-color)' }}>
+                      <i className="fas fa-user-circle"></i>
                       {currentUser.name}
-                  </span>
+                  </Link>
                   <button onClick={handleLogout} className="login-btn" style={{ background: '#e74c3c', border: 'none', cursor: 'pointer', padding: '8px 15px' }}>Đăng xuất</button>
               </div>
           ) : (
