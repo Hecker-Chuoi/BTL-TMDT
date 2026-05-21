@@ -107,6 +107,12 @@ const Home = () => {
     const salePrice = isFlashSale ? Math.floor(product.price * (100 - discountPercent) / 100) : product.price;
     const savedAmount = product.price - salePrice;
 
+    // Get rating data
+    const allReviews = JSON.parse(localStorage.getItem('productReviews')) || [];
+    const productReviews = allReviews.filter(r => r.product_id === product.id);
+    const hasReviews = productReviews.length > 0;
+    const avgRating = hasReviews ? (productReviews.reduce((sum, r) => sum + r.rating, 0) / productReviews.length) : 0;
+
     return (
     <div className="product-card" style={{ position: 'relative' }}>
       {isFlashSale && (
@@ -149,12 +155,16 @@ const Home = () => {
         )}
       </div>
       <div style={{ color: '#f39c12', fontSize: '13px', margin: '8px 0' }}>
-        <i className="fas fa-star"></i>
-        <i className="fas fa-star"></i>
-        <i className="fas fa-star"></i>
-        <i className="fas fa-star"></i>
-        <i className="fas fa-star-half-alt"></i> 
-        <span style={{ color: '#777', fontSize: '12px', marginLeft: '5px' }}>(42 đánh giá)</span>
+        {avgRating > 0 ? (
+          <>
+            {Array.from({ length: 5 }).map((_, i) => (
+              <i key={i} className={i < Math.round(avgRating) ? "fas fa-star" : "far fa-star"} style={{ color: i < Math.round(avgRating) ? "#f39c12" : "#ccc" }}></i>
+            ))}
+            <span style={{ color: '#777', fontSize: '12px', marginLeft: '5px' }}>({productReviews.length} đánh giá)</span>
+          </>
+        ) : (
+          <span style={{ color: '#999', fontSize: '12px', fontStyle: 'italic' }}>Chưa có đánh giá</span>
+        )}
       </div>
       <div style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '6px', color: product.stock > 0 ? '#27ae60' : '#e74c3c' }}>
         {product.stock > 0 ? `Còn ${product.stock} sản phẩm` : 'Hết hàng'}
@@ -243,7 +253,7 @@ const Home = () => {
               products
                 .filter(p => flashSale.product_ids.includes(p.id))
                 .slice(currentFlashSalePage * flashSaleItemsPerPage, (currentFlashSalePage + 1) * flashSaleItemsPerPage)
-                .map(p => <ProductCard key={p.id} product={p} />) 
+                .map(p => <ProductCard key={p.id} product={p} showRating={false} />) 
               : 
               <p>Đang tải dữ liệu...</p>
             }

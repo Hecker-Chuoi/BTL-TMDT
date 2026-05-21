@@ -3,7 +3,7 @@ import { getDB, setDB, getMainImage, formatMoney, dbBrands, getFlashSale, setFla
 import { useNavigate } from 'react-router-dom';
 
 const Admin = () => {
-    const [products, setProducts] = useState([]);
+    const [products, setProducts] = useState(() => getDB());
     const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 4;
     
@@ -14,16 +14,22 @@ const Admin = () => {
     const [filterCategory, setFilterCategory] = useState('all'); // 'all' | '1' | '2'
     
     // Data state
-    const [categories, setCategories] = useState([]);
-    const [brands, setBrands] = useState([]);
-    const [orders, setOrders] = useState([]);
-    const [customers, setCustomers] = useState([]);
-    const [flashSale, setFlashSaleState] = useState(null);
+    const [categories] = useState(() => JSON.parse(localStorage.getItem('categories')) || []);
+    const [orders, setOrders] = useState(() => JSON.parse(localStorage.getItem('orders')) || []);
+    const [orderItems] = useState(() => JSON.parse(localStorage.getItem('order_items')) || []);
+    const [payments] = useState(() => JSON.parse(localStorage.getItem('payments')) || []);
+    const [customers] = useState(() => {
+        const users = JSON.parse(localStorage.getItem('users')) || [];
+        return users.filter(user => user.role === 'USER');
+    });
+    const [reviews] = useState(() => JSON.parse(localStorage.getItem('productReviews')) || []);
+    const [reviewProductFilter, setReviewProductFilter] = useState('all');
+    const [reviewRatingFilter, setReviewRatingFilter] = useState('all');
 
     // Interface settings state
-    const [itemsPerPageValue, setItemsPerPageValue] = useState('6');
-    const [flashSaleItemsPerPageValue, setFlashSaleItemsPerPageValue] = useState('4');
-    const [bannerSettings, setBannerSettingsState] = useState([]);
+    const [itemsPerPageValue, setItemsPerPageValue] = useState(() => String(getItemsPerPage()));
+    const [flashSaleItemsPerPageValue, setFlashSaleItemsPerPageValue] = useState(() => String(getFlashSaleItemsPerPage()));
+    const [bannerSettings, setBannerSettingsState] = useState(() => getBannerSettings());
     const [bannerFormData, setBannerFormData] = useState({
         image_url: '',
         product_id: '',
@@ -32,10 +38,16 @@ const Admin = () => {
     const [editingBannerId, setEditingBannerId] = useState(null);
 
     // Flash sale form state
-    const [flashSaleDiscountPercent, setFlashSaleDiscountPercent] = useState('20');
-    const [flashSaleStartTime, setFlashSaleStartTime] = useState('');
-    const [flashSaleEndTime, setFlashSaleEndTime] = useState('');
-    const [flashSaleSelectedProducts, setFlashSaleSelectedProducts] = useState([]);
+    const [flashSaleDiscountPercent, setFlashSaleDiscountPercent] = useState(() => String(getFlashSale().discount_percent || 20));
+    const [flashSaleStartTime, setFlashSaleStartTime] = useState(() => {
+        const flashSaleData = getFlashSale();
+        return flashSaleData.start_time ? flashSaleData.start_time.substring(0, 16) : '';
+    });
+    const [flashSaleEndTime, setFlashSaleEndTime] = useState(() => {
+        const flashSaleData = getFlashSale();
+        return flashSaleData.end_time ? flashSaleData.end_time.substring(0, 16) : '';
+    });
+    const [flashSaleSelectedProducts, setFlashSaleSelectedProducts] = useState(() => getFlashSale().product_ids || []);
 
     // Form state
     const [formName, setFormName] = useState('');
@@ -49,7 +61,7 @@ const Admin = () => {
     const [formSpecs, setFormSpecs] = useState([
         { spec_key: '', spec_value: '' }
     ]);
-    const [adminProfile, setAdminProfile] = useState("Admin");
+    const [adminProfile] = useState(() => JSON.parse(sessionStorage.getItem('currentUser'))?.name || 'Admin');
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -59,37 +71,6 @@ const Admin = () => {
             navigate('/login');
             return;
         }
-
-        const dbData = getDB();
-        setProducts(dbData);
-        setAdminProfile(user.name);
-        
-        setCategories(JSON.parse(localStorage.getItem('categories')) || []);
-        setBrands(JSON.parse(localStorage.getItem('brands')) || []);
-        setOrders(JSON.parse(localStorage.getItem('orders')) || []);
-        
-        // Load customers (users with role = 'USER')
-        const users = JSON.parse(localStorage.getItem('users')) || [];
-        const userCustomers = users.filter(u => u.role === 'USER');
-        setCustomers(userCustomers);
-        
-        // Load flash sale data
-        const flashSaleData = getFlashSale();
-        setFlashSaleState(flashSaleData);
-        setFlashSaleDiscountPercent(String(flashSaleData.discount_percent || 20));
-        setFlashSaleStartTime(flashSaleData.start_time ? flashSaleData.start_time.substring(0, 16) : '');
-        setFlashSaleEndTime(flashSaleData.end_time ? flashSaleData.end_time.substring(0, 16) : '');
-        setFlashSaleSelectedProducts(flashSaleData.product_ids || []);
-
-        // Load UI settings
-        const itemsPerPage = getItemsPerPage();
-        setItemsPerPageValue(String(itemsPerPage));
-        
-        const flashSaleItemsPerPage = getFlashSaleItemsPerPage();
-        setFlashSaleItemsPerPageValue(String(flashSaleItemsPerPage));
-        
-        const banners = getBannerSettings();
-        setBannerSettingsState(banners);
     }, [navigate]);
 
     const handleLogout = () => {
@@ -149,6 +130,110 @@ const Admin = () => {
         localStorage.setItem('orders', JSON.stringify(updatedOrders));
     };
 
+    const getCustomerById = (userId) => {
+        return customers.find(customer => customer.id === userId) || null;
+    };
+
+    const getCustomerName = (userId) => {
+        return getCustomerById(userId)?.full_name || 'Khách hàng không xác định';
+    };
+
+    const getProductNameById = (productId) => {
+        return products.find(product => product.id === productId)?.name || `Sản phẩm #${productId}`;
+    };
+
+    const getOrderItemsByOrderId = (orderId) => {
+        return orderItems.filter(item => item.order_id === orderId);
+    };
+
+    const getPaymentMethodLabel = (paymentMethod) => {
+        return paymentMethod === 'ONLINE' ? 'Chuyển khoản (QR)' : 'Tiền mặt (COD)';
+    };
+
+    const getPaymentStatusMeta = (status) => {
+        if (status === 'SUCCESS') {
+            return { label: 'Thành công', background: '#27ae60' };
+        }
+        if (status === 'PENDING') {
+            return { label: 'Chờ xử lý', background: '#f39c12' };
+        }
+        return { label: status || 'Không xác định', background: '#7f8c8d' };
+    };
+
+    const getOrderStatusMeta = (status) => {
+        if (status === 'CONFIRMED') {
+            return { label: 'Đã duyệt', background: '#27ae60' };
+        }
+        if (status === 'PENDING') {
+            return { label: 'Chờ duyệt', background: '#f39c12' };
+        }
+        if (status === 'CANCELLED') {
+            return { label: 'Đã hủy', background: '#e74c3c' };
+        }
+        return { label: status || 'Không xác định', background: '#7f8c8d' };
+    };
+
+    const formatDateTime = (dateValue) => {
+        if (!dateValue) return 'N/A';
+        return new Date(dateValue).toLocaleString('vi-VN');
+    };
+
+    const formatShortDate = (dateValue) => {
+        if (!dateValue) return 'N/A';
+        return new Date(dateValue).toLocaleDateString('vi-VN');
+    };
+
+    const confirmedOrders = orders.filter(order => order.status === 'CONFIRMED');
+    const pendingOrders = orders.filter(order => order.status === 'PENDING');
+    const paymentHistory = [...payments].sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+    const totalRevenue = confirmedOrders.reduce((sum, order) => sum + Number(order.total_amount || 0), 0);
+    const successfulPaymentRevenue = payments
+        .filter(payment => payment.status === 'SUCCESS')
+        .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+    const pendingRevenue = pendingOrders.reduce((sum, order) => sum + Number(order.total_amount || 0), 0);
+    const todayRevenue = confirmedOrders
+        .filter(order => {
+            if (!order.created_at) return false;
+            return new Date(order.created_at).toDateString() === new Date().toDateString();
+        })
+        .reduce((sum, order) => sum + Number(order.total_amount || 0), 0);
+    const revenueByMethod = ['COD', 'ONLINE'].map(method => ({
+        method,
+        label: getPaymentMethodLabel(method),
+        amount: confirmedOrders
+            .filter(order => order.payment_method === method)
+            .reduce((sum, order) => sum + Number(order.total_amount || 0), 0),
+        count: confirmedOrders.filter(order => order.payment_method === method).length
+    }));
+    const topSellingProducts = Object.values(
+        orderItems.reduce((accumulator, item) => {
+            if (!accumulator[item.product_id]) {
+                accumulator[item.product_id] = {
+                    product_id: item.product_id,
+                    product_name: getProductNameById(item.product_id),
+                    quantity: 0,
+                    revenue: 0
+                };
+            }
+
+            accumulator[item.product_id].quantity += Number(item.quantity || 0);
+            accumulator[item.product_id].revenue += Number(item.price || 0) * Number(item.quantity || 0);
+            return accumulator;
+        }, {})
+    )
+        .sort((a, b) => b.quantity - a.quantity)
+        .slice(0, 5);
+
+    const filteredReviews = [...reviews]
+        .filter(review => reviewProductFilter === 'all' || String(review.product_id) === reviewProductFilter)
+        .filter(review => reviewRatingFilter === 'all' || String(review.rating) === reviewRatingFilter)
+        .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+    const averageReviewRating = reviews.length > 0
+        ? (reviews.reduce((sum, review) => sum + Number(review.rating || 0), 0) / reviews.length).toFixed(1)
+        : '0.0';
+    const fiveStarReviews = reviews.filter(review => Number(review.rating) === 5).length;
+    const lowRatingReviews = reviews.filter(review => Number(review.rating) <= 2).length;
+
     const handleFlashSaleSubmit = (e) => {
         e.preventDefault();
         
@@ -165,7 +250,6 @@ const Admin = () => {
         };
 
         setFlashSale(updatedFlashSale);
-        setFlashSaleState(updatedFlashSale);
         alert("Cập nhật Flash Sale thành công!");
     };
 
@@ -364,6 +448,8 @@ const Admin = () => {
                     <li><a href="#" className={`admin-nav-item ${currentTab === 'flashsale' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setCurrentTab('flashsale'); }} style={{ whiteSpace: 'nowrap' }}><i className="fas fa-bolt"></i>{isSidebarOpen && ' Flash Sale'}</a></li>
                     <li><a href="#" className={`admin-nav-item ${currentTab === 'interface' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setCurrentTab('interface'); }} style={{ whiteSpace: 'nowrap' }}><i className="fas fa-sliders-h"></i>{isSidebarOpen && ' Quản lý Giao diện'}</a></li>
                     <li><a href="#" className={`admin-nav-item ${currentTab === 'orders' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setCurrentTab('orders'); }} style={{ whiteSpace: 'nowrap' }}><i className="fas fa-shopping-cart"></i>{isSidebarOpen && ' Quản lý Đơn hàng'}</a></li>
+                    <li><a href="#" className={`admin-nav-item ${currentTab === 'revenue' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setCurrentTab('revenue'); }} style={{ whiteSpace: 'nowrap' }}><i className="fas fa-chart-line"></i>{isSidebarOpen && ' Doanh thu'}</a></li>
+                    <li><a href="#" className={`admin-nav-item ${currentTab === 'reviews' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setCurrentTab('reviews'); }} style={{ whiteSpace: 'nowrap' }}><i className="fas fa-star"></i>{isSidebarOpen && ' Đánh giá'}</a></li>
                     <li><a href="#" className={`admin-nav-item ${currentTab === 'customers' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setCurrentTab('customers'); }} style={{ whiteSpace: 'nowrap' }}><i className="fas fa-users"></i>{isSidebarOpen && ' Khách hàng'}</a></li>
                 </ul>
             </aside>
@@ -480,24 +566,65 @@ const Admin = () => {
                 {currentTab === 'orders' && (
                 <section className="admin-content-area">
                     <div className="admin-page-title">
-                        <h2>Quản lý Đơn hàng</h2>
+                        <h2>Quản lý Đơn hàng và Thanh toán</h2>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginBottom: '24px' }}>
+                        <div style={{ background: 'white', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 5px rgba(0,0,0,0.08)' }}>
+                            <div style={{ color: '#666', fontSize: '13px', marginBottom: '8px' }}>Tổng số đơn</div>
+                            <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#2c3e50' }}>{orders.length}</div>
+                        </div>
+                        <div style={{ background: 'white', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 5px rgba(0,0,0,0.08)' }}>
+                            <div style={{ color: '#666', fontSize: '13px', marginBottom: '8px' }}>Đơn chờ duyệt</div>
+                            <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#f39c12' }}>{pendingOrders.length}</div>
+                        </div>
+                        <div style={{ background: 'white', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 5px rgba(0,0,0,0.08)' }}>
+                            <div style={{ color: '#666', fontSize: '13px', marginBottom: '8px' }}>Đơn đã duyệt</div>
+                            <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#27ae60' }}>{confirmedOrders.length}</div>
+                        </div>
+                        <div style={{ background: 'white', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 5px rgba(0,0,0,0.08)' }}>
+                            <div style={{ color: '#666', fontSize: '13px', marginBottom: '8px' }}>Lịch sử thanh toán</div>
+                            <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#8e44ad' }}>{payments.length}</div>
+                        </div>
                     </div>
                     <div className="table-container">
                         <table>
                             <thead>
-                                <tr><th>Mã Đơn</th><th>Tổng tiền</th><th>Thanh toán</th><th>Tình trạng</th><th>Hành động</th></tr>
+                                <tr><th>Mã Đơn</th><th>Khách hàng</th><th>Sản phẩm</th><th>Tổng tiền</th><th>Thanh toán</th><th>Tình trạng</th><th>Thời gian</th><th>Hành động</th></tr>
                             </thead>
                             <tbody>
                                 {[...orders].reverse().map(o => (
                                     <tr key={o.id}>
                                         <td>#{o.id}</td>
-                                        <td style={{ color: '#e74c3c', fontWeight: 'bold' }}>{formatMoney(o.total_amount)}</td>
-                                        <td>{o.payment_method === 'ONLINE' ? 'Chuyển khoản (QR)' : 'Tiền mặt (COD)'}</td>
                                         <td>
-                                            <span style={{ padding: '5px 10px', borderRadius: '4px', background: o.status === 'PENDING' ? '#f39c12' : '#27ae60', color: 'white', fontSize: '12px', fontWeight: 'bold' }}>
-                                                {o.status}
+                                            <strong>{getCustomerName(o.user_id)}</strong>
+                                            <div style={{ color: '#777', fontSize: '12px' }}>{getCustomerById(o.user_id)?.email || 'Không có email'}</div>
+                                        </td>
+                                        <td style={{ maxWidth: '280px' }}>
+                                            {getOrderItemsByOrderId(o.id).length > 0 ? (
+                                                getOrderItemsByOrderId(o.id).map(item => (
+                                                    <div key={item.id} style={{ fontSize: '13px', marginBottom: '4px' }}>
+                                                        {item.product_name || getProductNameById(item.product_id)} x{item.quantity}
+                                                    </div>
+                                                ))
+                                            ) : (
+                                                <span style={{ color: '#999' }}>Không có chi tiết</span>
+                                            )}
+                                        </td>
+                                        <td style={{ color: '#e74c3c', fontWeight: 'bold' }}>{formatMoney(o.total_amount)}</td>
+                                        <td>
+                                            <div>{getPaymentMethodLabel(o.payment_method)}</div>
+                                            <div style={{ marginTop: '4px' }}>
+                                                <span style={{ padding: '4px 8px', borderRadius: '4px', background: getPaymentStatusMeta(o.payment_status).background, color: 'white', fontSize: '12px', fontWeight: 'bold' }}>
+                                                    {getPaymentStatusMeta(o.payment_status).label}
+                                                </span>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <span style={{ padding: '5px 10px', borderRadius: '4px', background: getOrderStatusMeta(o.status).background, color: 'white', fontSize: '12px', fontWeight: 'bold' }}>
+                                                {getOrderStatusMeta(o.status).label}
                                             </span>
                                         </td>
+                                        <td>{formatDateTime(o.created_at)}</td>
                                         <td>
                                             {o.status === 'PENDING' ? (
                                                 <button className="action-btn" style={{ background: '#3498db', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer' }} onClick={() => updateOrderStatus(o.id, 'CONFIRMED')}><i className="fas fa-check"></i> Duyệt Đơn</button>
@@ -507,7 +634,203 @@ const Admin = () => {
                                         </td>
                                     </tr>
                                 ))}
-                                {orders.length === 0 && <tr><td colSpan="5" style={{ textAlign: 'center' }}>Chưa có đơn hàng nào</td></tr>}
+                                {orders.length === 0 && <tr><td colSpan="8" style={{ textAlign: 'center' }}>Chưa có đơn hàng nào</td></tr>}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div style={{ background: 'white', borderRadius: '8px', boxShadow: '0 2px 5px rgba(0,0,0,0.08)', marginTop: '24px', overflow: 'hidden' }}>
+                        <div style={{ padding: '20px 20px 0' }}>
+                            <h3 style={{ margin: 0 }}>Lịch sử thanh toán</h3>
+                            <p style={{ margin: '8px 0 20px', color: '#666', fontSize: '14px' }}>Theo dõi giao dịch QR, COD và trạng thái thanh toán của từng đơn hàng.</p>
+                        </div>
+                        <table>
+                            <thead>
+                                <tr><th>Mã GD</th><th>Đơn hàng</th><th>Khách hàng</th><th>Số tiền</th><th>Phương thức</th><th>Trạng thái</th><th>Mã giao dịch</th><th>Thời gian</th></tr>
+                            </thead>
+                            <tbody>
+                                {paymentHistory.map(payment => {
+                                    const order = orders.find(item => item.id === payment.order_id);
+                                    return (
+                                        <tr key={payment.id}>
+                                            <td>#{payment.id}</td>
+                                            <td>#{payment.order_id}</td>
+                                            <td>{order ? getCustomerName(order.user_id) : 'Không rõ đơn hàng'}</td>
+                                            <td style={{ color: '#e74c3c', fontWeight: 'bold' }}>{formatMoney(payment.amount || 0)}</td>
+                                            <td>{getPaymentMethodLabel(payment.method)}</td>
+                                            <td>
+                                                <span style={{ padding: '5px 10px', borderRadius: '4px', background: getPaymentStatusMeta(payment.status).background, color: 'white', fontSize: '12px', fontWeight: 'bold' }}>
+                                                    {getPaymentStatusMeta(payment.status).label}
+                                                </span>
+                                            </td>
+                                            <td>{payment.transaction_code || 'COD'}</td>
+                                            <td>{formatDateTime(payment.created_at)}</td>
+                                        </tr>
+                                    );
+                                })}
+                                {paymentHistory.length === 0 && <tr><td colSpan="8" style={{ textAlign: 'center' }}>Chưa có lịch sử thanh toán</td></tr>}
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+                )}
+
+                {currentTab === 'revenue' && (
+                <section className="admin-content-area">
+                    <div className="admin-page-title">
+                        <h2>Doanh thu</h2>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginBottom: '24px' }}>
+                        <div style={{ background: 'linear-gradient(135deg, #27ae60, #2ecc71)', color: 'white', padding: '22px', borderRadius: '10px' }}>
+                            <div style={{ fontSize: '13px', opacity: 0.9, marginBottom: '8px' }}>Doanh thu đã ghi nhận</div>
+                            <div style={{ fontSize: '28px', fontWeight: 'bold' }}>{formatMoney(totalRevenue)}</div>
+                            <div style={{ fontSize: '12px', marginTop: '6px', opacity: 0.9 }}>{confirmedOrders.length} đơn đã duyệt</div>
+                        </div>
+                        <div style={{ background: 'linear-gradient(135deg, #2980b9, #3498db)', color: 'white', padding: '22px', borderRadius: '10px' }}>
+                            <div style={{ fontSize: '13px', opacity: 0.9, marginBottom: '8px' }}>Tiền đã thanh toán</div>
+                            <div style={{ fontSize: '28px', fontWeight: 'bold' }}>{formatMoney(successfulPaymentRevenue)}</div>
+                            <div style={{ fontSize: '12px', marginTop: '6px', opacity: 0.9 }}>{payments.filter(payment => payment.status === 'SUCCESS').length} giao dịch thành công</div>
+                        </div>
+                        <div style={{ background: 'linear-gradient(135deg, #f39c12, #f1c40f)', color: 'white', padding: '22px', borderRadius: '10px' }}>
+                            <div style={{ fontSize: '13px', opacity: 0.9, marginBottom: '8px' }}>Doanh thu chờ xử lý</div>
+                            <div style={{ fontSize: '28px', fontWeight: 'bold' }}>{formatMoney(pendingRevenue)}</div>
+                            <div style={{ fontSize: '12px', marginTop: '6px', opacity: 0.9 }}>{pendingOrders.length} đơn chờ duyệt</div>
+                        </div>
+                        <div style={{ background: 'linear-gradient(135deg, #8e44ad, #9b59b6)', color: 'white', padding: '22px', borderRadius: '10px' }}>
+                            <div style={{ fontSize: '13px', opacity: 0.9, marginBottom: '8px' }}>Doanh thu hôm nay</div>
+                            <div style={{ fontSize: '28px', fontWeight: 'bold' }}>{formatMoney(todayRevenue)}</div>
+                            <div style={{ fontSize: '12px', marginTop: '6px', opacity: 0.9 }}>{formatShortDate(new Date())}</div>
+                        </div>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(300px, 1fr) minmax(300px, 1fr)', gap: '24px', marginBottom: '24px' }}>
+                        <div style={{ background: 'white', padding: '24px', borderRadius: '8px', boxShadow: '0 2px 5px rgba(0,0,0,0.08)' }}>
+                            <h3 style={{ marginTop: 0, marginBottom: '18px' }}>Doanh thu theo phương thức thanh toán</h3>
+                            {revenueByMethod.map(item => (
+                                <div key={item.method} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 0', borderBottom: '1px solid #eee' }}>
+                                    <div>
+                                        <div style={{ fontWeight: 'bold' }}>{item.label}</div>
+                                        <div style={{ fontSize: '12px', color: '#666' }}>{item.count} đơn đã duyệt</div>
+                                    </div>
+                                    <div style={{ color: '#e74c3c', fontWeight: 'bold' }}>{formatMoney(item.amount)}</div>
+                                </div>
+                            ))}
+                        </div>
+
+                        <div style={{ background: 'white', padding: '24px', borderRadius: '8px', boxShadow: '0 2px 5px rgba(0,0,0,0.08)' }}>
+                            <h3 style={{ marginTop: 0, marginBottom: '18px' }}>Sản phẩm bán chạy</h3>
+                            {topSellingProducts.length > 0 ? topSellingProducts.map((item, index) => (
+                                <div key={item.product_id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 0', borderBottom: index === topSellingProducts.length - 1 ? 'none' : '1px solid #eee' }}>
+                                    <div>
+                                        <div style={{ fontWeight: 'bold' }}>{item.product_name}</div>
+                                        <div style={{ fontSize: '12px', color: '#666' }}>Đã bán {item.quantity} sản phẩm</div>
+                                    </div>
+                                    <div style={{ textAlign: 'right' }}>
+                                        <div style={{ color: '#e74c3c', fontWeight: 'bold' }}>{formatMoney(item.revenue)}</div>
+                                        <div style={{ fontSize: '12px', color: '#666' }}>Top {index + 1}</div>
+                                    </div>
+                                </div>
+                            )) : (
+                                <p style={{ color: '#999', marginBottom: 0 }}>Chưa có dữ liệu bán hàng.</p>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="table-container">
+                        <table>
+                            <thead>
+                                <tr><th>Mã đơn</th><th>Khách hàng</th><th>Phương thức</th><th>Tổng tiền</th><th>Ngày duyệt/đặt</th></tr>
+                            </thead>
+                            <tbody>
+                                {confirmedOrders.length > 0 ? [...confirmedOrders].reverse().slice(0, 10).map(order => (
+                                    <tr key={order.id}>
+                                        <td>#{order.id}</td>
+                                        <td>{getCustomerName(order.user_id)}</td>
+                                        <td>{getPaymentMethodLabel(order.payment_method)}</td>
+                                        <td style={{ color: '#e74c3c', fontWeight: 'bold' }}>{formatMoney(order.total_amount)}</td>
+                                        <td>{formatDateTime(order.updated_at || order.created_at)}</td>
+                                    </tr>
+                                )) : (
+                                    <tr><td colSpan="5" style={{ textAlign: 'center' }}>Chưa có doanh thu để thống kê</td></tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+                )}
+
+                {currentTab === 'reviews' && (
+                <section className="admin-content-area">
+                    <div className="admin-page-title">
+                        <h2>Đánh giá sản phẩm</h2>
+                    </div>
+
+                    <div style={{ background: 'white', padding: '24px', borderRadius: '8px', boxShadow: '0 2px 5px rgba(0,0,0,0.08)', marginBottom: '24px' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(220px, 1fr) minmax(180px, 220px)', gap: '16px' }}>
+                            <div>
+                                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>Lọc theo sản phẩm</label>
+                                <select value={reviewProductFilter} onChange={e => setReviewProductFilter(e.target.value)}>
+                                    <option value="all">Tất cả sản phẩm</option>
+                                    {products.map(product => (
+                                        <option key={product.id} value={product.id}>{product.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>Lọc theo số sao</label>
+                                <select value={reviewRatingFilter} onChange={e => setReviewRatingFilter(e.target.value)}>
+                                    <option value="all">Tất cả mức sao</option>
+                                    <option value="5">5 sao</option>
+                                    <option value="4">4 sao</option>
+                                    <option value="3">3 sao</option>
+                                    <option value="2">2 sao</option>
+                                    <option value="1">1 sao</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginBottom: '24px' }}>
+                        <div style={{ background: 'white', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 5px rgba(0,0,0,0.08)' }}>
+                            <div style={{ color: '#666', fontSize: '13px', marginBottom: '8px' }}>Tổng đánh giá</div>
+                            <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#2c3e50' }}>{reviews.length}</div>
+                        </div>
+                        <div style={{ background: 'white', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 5px rgba(0,0,0,0.08)' }}>
+                            <div style={{ color: '#666', fontSize: '13px', marginBottom: '8px' }}>Điểm trung bình</div>
+                            <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#f39c12' }}>{averageReviewRating} / 5</div>
+                        </div>
+                        <div style={{ background: 'white', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 5px rgba(0,0,0,0.08)' }}>
+                            <div style={{ color: '#666', fontSize: '13px', marginBottom: '8px' }}>Đánh giá 5 sao</div>
+                            <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#27ae60' }}>{fiveStarReviews}</div>
+                        </div>
+                        <div style={{ background: 'white', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 5px rgba(0,0,0,0.08)' }}>
+                            <div style={{ color: '#666', fontSize: '13px', marginBottom: '8px' }}>Đánh giá thấp (1-2 sao)</div>
+                            <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#e74c3c' }}>{lowRatingReviews}</div>
+                        </div>
+                    </div>
+
+                    <div className="table-container">
+                        <table>
+                            <thead>
+                                <tr><th>Người đánh giá</th><th>Sản phẩm</th><th>Số sao</th><th>Nội dung</th><th>Ngày đánh giá</th></tr>
+                            </thead>
+                            <tbody>
+                                {filteredReviews.map(review => (
+                                    <tr key={review.id}>
+                                        <td>{getCustomerName(review.user_id)}</td>
+                                        <td>{getProductNameById(review.product_id)}</td>
+                                        <td>
+                                            <span style={{ color: '#f39c12', fontWeight: 'bold' }}>
+                                                {'★'.repeat(Number(review.rating || 0))}
+                                                <span style={{ color: '#ccc' }}>{'★'.repeat(5 - Number(review.rating || 0))}</span>
+                                            </span>
+                                        </td>
+                                        <td style={{ maxWidth: '420px', lineHeight: 1.5 }}>{review.comment || review.text || 'Không có nội dung'}</td>
+                                        <td>{formatDateTime(review.created_at)}</td>
+                                    </tr>
+                                ))}
+                                {filteredReviews.length === 0 && <tr><td colSpan="5" style={{ textAlign: 'center' }}>Không có đánh giá phù hợp bộ lọc</td></tr>}
                             </tbody>
                         </table>
                     </div>
@@ -532,7 +855,7 @@ const Admin = () => {
                                         <td>{c.email}</td>
                                         <td>{c.phone || 'Chưa cập nhật'}</td>
                                         <td>{c.address || 'Chưa cập nhật'}</td>
-                                        <td>{new Date(c.created_at || Date.now()).toLocaleDateString('vi-VN')}</td>
+                                        <td>{formatShortDate(c.created_at)}</td>
                                     </tr>
                                 ))}
                                 {customers.length === 0 && <tr><td colSpan="6" style={{ textAlign: 'center' }}>Chưa có khách hàng nào</td></tr>}

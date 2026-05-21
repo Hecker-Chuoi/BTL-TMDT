@@ -94,6 +94,15 @@ const Shop = () => {
         );
     };
 
+    // Get average rating and review count for a product
+    const getAverageRating = (productId) => {
+        const allReviews = JSON.parse(localStorage.getItem('productReviews')) || [];
+        const productReviews = allReviews.filter(r => r.product_id === productId);
+        if (productReviews.length === 0) return { avgRating: 0, count: 0 };
+        const totalRating = productReviews.reduce((sum, r) => sum + r.rating, 0);
+        return { avgRating: totalRating / productReviews.length, count: productReviews.length };
+    };
+
     // Pagination Calculation
     const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
     const startIdx = (currentPage - 1) * itemsPerPage;
@@ -159,7 +168,7 @@ const Shop = () => {
 
                 <div className="product-grid">
                     {currentProducts.map(p => {
-                        const randomReviews = Math.floor(Math.random() * 90) + 10;
+                        const ratingData = getAverageRating(p.id);
                         const discountPercent = getFlashSaleDiscountForProduct(p.id);
                         const salePrice = discountPercent > 0 ? Math.floor(p.price * (100 - discountPercent) / 100) : p.price;
                         const savedAmount = p.price - salePrice;
@@ -202,12 +211,16 @@ const Shop = () => {
                                     </div>
                                     
                                     <div style={{ color: '#f39c12', fontSize: '13px', margin: '8px 0' }}>
-                                        <i className="fas fa-star"></i>
-                                        <i className="fas fa-star"></i>
-                                        <i className="fas fa-star"></i>
-                                        <i className="fas fa-star"></i>
-                                        <i className="fas fa-star-half-alt"></i> 
-                                        <span style={{ color: '#777', fontSize: '12px', marginLeft: '5px' }}>({randomReviews} đánh giá)</span>
+                                        {ratingData.count > 0 ? (
+                                            <>
+                                                {Array.from({ length: 5 }).map((_, i) => (
+                                                    <i key={i} className={i < Math.round(ratingData.avgRating) ? "fas fa-star" : "far fa-star"} style={{ color: i < Math.round(ratingData.avgRating) ? "#f39c12" : "#ccc" }}></i>
+                                                ))}
+                                                <span style={{ color: '#777', fontSize: '12px', marginLeft: '5px' }}>({ratingData.count} đánh giá)</span>
+                                            </>
+                                        ) : (
+                                            <span style={{ color: '#999', fontSize: '12px', fontStyle: 'italic' }}>Chưa có đánh giá</span>
+                                        )}
                                     </div>
                                     <div style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '6px', color: p.stock > 0 ? '#27ae60' : '#e74c3c' }}>
                                         {p.stock > 0 ? `Còn ${p.stock} sản phẩm` : 'Hết hàng'}
