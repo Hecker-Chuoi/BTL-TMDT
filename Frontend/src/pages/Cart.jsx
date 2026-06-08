@@ -8,6 +8,8 @@ const Cart = () => {
     const [voucherCode, setVoucherCode] = useState("");
     const [voucherMessage, setVoucherMessage] = useState({ text: "", type: "" });
     const [discountAmount, setDiscountAmount] = useState(0);
+    const [applicableCoupons, setApplicableCoupons] = useState([]);
+    const [copiedCouponCode, setCopiedCouponCode] = useState(null);
     
     // Address Management States
     const [userId, setUserId] = useState(null);
@@ -60,7 +62,7 @@ const Cart = () => {
             const items = JSON.parse(localStorage.getItem(key)) || [];
             setCartItems(items);
 
-            // Load user addresses
+            // Load user addresses and applicable coupons
             const currentUser = JSON.parse(sessionStorage.getItem('currentUser'));
             if (currentUser) {
                 const users = JSON.parse(localStorage.getItem('users')) || [];
@@ -81,6 +83,27 @@ const Cart = () => {
                         setAddressLine(defaultAddr.address_line);
                         setCity(defaultAddr.city);
                     }
+
+                    // Load applicable coupons
+                    const coupons = getCoupons();
+                    const now = new Date();
+                    const applicable = coupons.filter(coupon => {
+                        if (coupon.status !== 'ACTIVE') return false;
+                        const startDate = new Date(coupon.start_date);
+                        const endDate = new Date(coupon.end_date);
+                        if (now < startDate || now >= endDate) return false;
+                        
+                        if (coupon.target_type === 'all') {
+                            return true;
+                        } else if (coupon.target_type === 'specific') {
+                            if (coupon.user_ids && coupon.user_ids.includes(userDb.id)) {
+                                return true;
+                            }
+                            return false;
+                        }
+                        return false;
+                    });
+                    setApplicableCoupons(applicable);
                 }
             }
         }
@@ -224,6 +247,21 @@ const Cart = () => {
         }
     };
 
+    const formatDiscount = (coupon) => {
+        if (coupon.discount_type === 'percent') {
+            return `${coupon.discount_value}%`;
+        } else {
+            return `₫${coupon.discount_value.toLocaleString('vi-VN')}`;
+        }
+    };
+
+    const handleCopyCoupon = (code) => {
+        navigator.clipboard.writeText(code);
+        setCopiedCouponCode(code);
+        setVoucherCode(code);
+        setTimeout(() => setCopiedCouponCode(null), 2000);
+    };
+
     const processCheckout = async () => {
         if (isSubmitting) return;
         if (!cartKey) {
@@ -279,6 +317,8 @@ const Cart = () => {
         const orders = getLocalArray('orders');
         orders.push(newOrder);
         localStorage.setItem('orders', JSON.stringify(orders));
+        // Dispatch event to notify components about new order
+        window.dispatchEvent(new Event('ordersUpdated'));
 
         // 3. Tạo Order Items
         const orderItemsList = getLocalArray('order_items');
@@ -467,6 +507,62 @@ const Cart = () => {
                         {voucherMessage.text && (
                             <div style={{ fontSize: '13px', marginTop: '8px', fontWeight: 'bold', color: voucherMessage.type === 'error' ? '#c0392b' : '#27ae60' }}>
                                 {voucherMessage.text}
+                            </div>
+                        )}
+
+                        {/* Display applicable coupons */}
+                        {applicableCoupons.length > 0 && (
+                            <div style={{ marginTop: '15px', paddingTop: '15px', borderTop: '1px solid #eee' }}>
+                                <div style={{ fontSize: '12px', color: '#666', fontWeight: 'bold', marginBottom: '10px' }}>
+                                    Mã khuyến mãi có sẵn cho bạn:
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                    {applicableCoupons.map((coupon) => (
+                                        <div
+                                            key={coupon.id}
+                                            style={{
+                                                display: 'flex',
+                                                justifyContent: 'space-between',
+                                                alignItems: 'center',
+                                                padding: '8px',
+                                                backgroundColor: '#f9f9f9',
+                                                border: '1px solid #e0e0e0',
+                                                borderRadius: '4px',
+                                                fontSize: '12px'
+                                            }}
+                                        >
+                                            <div>
+                                                <div style={{ fontWeight: 'bold', color: '#333' }}>{coupon.code}</div>
+                                                <div style={{ color: '#e74c3c', fontSize: '11px' }}>
+                                                    Giảm: {formatDiscount(coupon)}
+                                                </div>
+                                            </div>
+                                            <button
+                                                onClick={() => handleCopyCoupon(coupon.code)}
+                                                style={{
+                                                    padding: '5px 10px',
+                                                    backgroundColor: copiedCouponCode === coupon.code ? '#27ae60' : '#3498db',
+                                                    color: 'white',
+                                                    border: 'none',
+                                                    borderRadius: '3px',
+                                                    fontSize: '11px',
+                                                    cursor: 'pointer',
+                                                    fontWeight: 'bold',
+                                                    whiteSpace: 'nowrap',
+                                                    transition: 'background-color 0.3s'
+                                                }}
+                                            >
+                                                {copiedCouponCode === coupon.code ? '✓ Đã copy' : 'Copy'}
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                        {applicableCoupons.length === 0 && (
+                            <div style={{ marginTop: '15px', paddingTop: '15px', borderTop: '1px solid #eee', textAlign: 'center', color: '#999', fontSize: '12px' }}>
+                                <i className="fas fa-inbox" style={{ marginRight: '5px' }}></i>
+                                Không có mã giảm giá nào
                             </div>
                         )}
                     </div>

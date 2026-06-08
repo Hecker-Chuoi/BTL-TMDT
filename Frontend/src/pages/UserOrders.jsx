@@ -91,6 +91,8 @@ const UserOrders = () => {
         );
         setOrders(updatedOrders);
         localStorage.setItem('orders', JSON.stringify(updatedOrders));
+        // Dispatch event to notify other components about order update
+        window.dispatchEvent(new Event('ordersUpdated'));
     };
 
     const getProductImage = (productId) => {

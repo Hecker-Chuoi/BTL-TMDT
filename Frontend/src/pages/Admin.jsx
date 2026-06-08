@@ -332,9 +332,15 @@ const Admin = () => {
     };
 
     const updateOrderStatus = (orderId, newStatus) => {
-        const updatedOrders = orders.map(o => o.id === orderId ? { ...o, status: newStatus } : o);
+        const updatedOrders = orders.map(o =>
+            o.id === orderId
+                ? { ...o, status: newStatus, updated_at: new Date().toISOString() }
+                : o
+        );
         setOrders(updatedOrders);
         localStorage.setItem('orders', JSON.stringify(updatedOrders));
+        // Dispatch event to notify other components trong cùng tab
+        window.dispatchEvent(new Event('ordersUpdated'));
     };
 
     const handleFlashSaleSubmit = (e) => {
@@ -463,7 +469,10 @@ const Admin = () => {
     const saveCoupons = (updatedCoupons) => {
         setCouponsState(updatedCoupons);
         setCoupons(updatedCoupons);
+        // Notify CouponList component trong cùng tab
+        window.dispatchEvent(new Event('couponsUpdated'));
     };
+
 
     const handleCouponMultiSelect = (field, values) => {
         setCouponForm({

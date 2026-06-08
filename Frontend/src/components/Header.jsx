@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { getCartKey, removeLoggedInUser, getSearchSuggestions } from '../utils/mockData';
 import NotificationBell from './NotificationBell';
+import CouponList from './CouponList';
 
 const readCartCount = () => {
   try {
@@ -205,6 +206,7 @@ const Header = () => {
         
         <div className="header-actions">
           <NotificationBell />
+          <CouponList />
           <Link to="/cart" className="cart-icon">
             <i className="fas fa-shopping-cart"></i>
             <span className="cart-count">{cartCount}</span>
