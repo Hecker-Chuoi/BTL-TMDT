@@ -1,0 +1,249 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "OpenAPI definition",
+    "version": "v0"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8080",
+      "description": "Generated server url"
+    }
+  ],
+  "paths": {
+    "/api/payment/vnpay/create": {
+      "get": {
+        "tags": [
+          "payment-controller"
+        ],
+        "operationId": "createPaymentByQuery",
+        "parameters": [
+          {
+            "name": "amount",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "orderId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "orderInfo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "bankCode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "language",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateVnPayPaymentResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "payment-controller"
+        ],
+        "operationId": "createPayment",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateVnPayPaymentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateVnPayPaymentResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/payment/vnpay/return": {
+      "get": {
+        "tags": [
+          "payment-controller"
+        ],
+        "operationId": "paymentReturn",
+        "parameters": [
+          {
+            "name": "params",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/VnPayPaymentResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/payment/vnpay/ipn": {
+      "get": {
+        "tags": [
+          "payment-controller"
+        ],
+        "operationId": "paymentIpn",
+        "parameters": [
+          {
+            "name": "params",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "CreateVnPayPaymentRequest": {
+        "type": "object",
+        "properties": {
+          "amount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "orderId": {
+            "type": "string"
+          },
+          "orderInfo": {
+            "type": "string"
+          },
+          "bankCode": {
+            "type": "string"
+          },
+          "language": {
+            "type": "string"
+          }
+        }
+      },
+      "CreateVnPayPaymentResponse": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "orderId": {
+            "type": "string"
+          },
+          "paymentUrl": {
+            "type": "string"
+          }
+        }
+      },
+      "VnPayPaymentResult": {
+        "type": "object",
+        "properties": {
+          "validSignature": {
+            "type": "boolean"
+          },
+          "success": {
+            "type": "boolean"
+          },
+          "orderId": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "string"
+          },
+          "responseCode": {
+            "type": "string"
+          },
+          "transactionStatus": {
+            "type": "string"
+          },
+          "transactionNo": {
+            "type": "string"
+          },
+          "bankCode": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

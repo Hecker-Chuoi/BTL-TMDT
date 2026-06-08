@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { formatMoney, getCartKey, getFlashSaleDiscountForProduct, getUserAddresses, getDefaultAddress, addAddress, getUserById } from '../utils/mockData';
+import { formatMoney, getCartKey, getFlashSaleDiscountForProduct, getUserAddresses, getDefaultAddress, addAddress, getCoupons } from '../utils/mockData';
 
 const Cart = () => {
     const [cartItems, setCartItems] = useState([]);
@@ -30,14 +30,27 @@ const Cart = () => {
     const [phone, setPhone] = useState("");
     const [addressLine, setAddressLine] = useState("");
     const [city, setCity] = useState("");
-    const [paymentMethod, setPaymentMethod] = useState("COD"); // COD or ONLINE (QR)
+    const [paymentMethod, setPaymentMethod] = useState("COD");
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     const navigate = useNavigate();
+    const VNPAY_CREATE_PAYMENT_URL = '/api/payment/vnpay/create';
 
-    const validVouchers = {
-        "SINHVIENIT": { type: "percent", value: 10 },
-        "GIAM50K": { type: "fixed", value: 50000 },
-        "FREESHIP": { type: "fixed", value: 30000 }
+    const getLocalArray = (key) => {
+        try {
+            const value = JSON.parse(localStorage.getItem(key));
+            return Array.isArray(value) ? value : [];
+        } catch (error) {
+            console.warn(`Invalid localStorage JSON for ${key}. Resetting to empty array.`, error);
+            localStorage.setItem(key, JSON.stringify([]));
+            return [];
+        }
+    };
+
+    const getCurrentUserId = () => {
+        const currentUser = JSON.parse(sessionStorage.getItem('currentUser'));
+        const users = JSON.parse(localStorage.getItem('users')) || [];
+        return users.find(u => u.email === currentUser?.email)?.id || null;
     };
 
     useEffect(() => {
@@ -143,19 +156,47 @@ const Cart = () => {
         return acc + itemPrice * item.quantity;
     }, 0);
 
+    const getCouponBaseAmount = (coupon) => {
+        if (coupon.scope_type !== 'products') return subTotal;
+        const productIds = coupon.product_ids || [];
+        return cartItems.reduce((acc, item) => {
+            if (!productIds.includes(item.id)) return acc;
+            const flashSaleDiscount = getFlashSaleDiscountForProduct(item.id);
+            const itemPrice = flashSaleDiscount > 0
+                ? Math.floor(item.price * (100 - flashSaleDiscount) / 100)
+                : item.price;
+            return acc + itemPrice * item.quantity;
+        }, 0);
+    };
+
+    const calculateCouponDiscount = (coupon) => {
+        const baseAmount = getCouponBaseAmount(coupon);
+        if (baseAmount <= 0) return 0;
+        if (coupon.discount_type === "percent") {
+            return Math.floor((baseAmount * Number(coupon.discount_value || 0)) / 100);
+        }
+        return Math.min(Number(coupon.discount_value || 0), baseAmount);
+    };
+
+    const findUsableCoupon = (code) => {
+        const now = new Date();
+        const currentUserId = getCurrentUserId();
+        const coupon = getCoupons().find(item => item.code?.toUpperCase() === code);
+        if (!coupon || coupon.status === 'INACTIVE') return null;
+        if (coupon.start_date && now < new Date(coupon.start_date)) return null;
+        if (coupon.end_date && now > new Date(coupon.end_date)) return null;
+        if (coupon.target_type === 'users' && !(coupon.user_ids || []).includes(currentUserId)) return null;
+        if (coupon.scope_type === 'products' && getCouponBaseAmount(coupon) <= 0) return null;
+        return coupon;
+    };
+
     // Recalculate discount if cart changes
     useEffect(() => {
         if (voucherMessage.type === "success" && voucherCode.trim() !== "") {
-            const voucherObj = validVouchers[voucherCode.trim().toUpperCase()];
-            if (voucherObj) {
-                if (voucherObj.type === "percent") {
-                    setDiscountAmount((subTotal * voucherObj.value) / 100);
-                } else if (voucherObj.type === "fixed") {
-                    setDiscountAmount(voucherObj.value);
-                }
-            }
+            const coupon = findUsableCoupon(voucherCode.trim().toUpperCase());
+            setDiscountAmount(coupon ? calculateCouponDiscount(coupon) : 0);
         }
-    }, [subTotal, voucherMessage, voucherCode]);
+    }, [subTotal, voucherMessage, voucherCode, cartItems]);
 
     let finalTotal = subTotal - discountAmount;
     if (finalTotal < 0) finalTotal = 0;
@@ -173,21 +214,18 @@ const Cart = () => {
             return;
         }
 
-        if (validVouchers[inputCode]) {
-            const voucherObj = validVouchers[inputCode];
+        const coupon = findUsableCoupon(inputCode);
+        if (coupon) {
             setVoucherMessage({ text: `✔️ Áp dụng thành công mã ${inputCode}!`, type: "success" });
-            if (voucherObj.type === "percent") {
-                setDiscountAmount((subTotal * voucherObj.value) / 100);
-            } else if (voucherObj.type === "fixed") {
-                setDiscountAmount(voucherObj.value);
-            }
+            setDiscountAmount(calculateCouponDiscount(coupon));
         } else {
             setVoucherMessage({ text: "❌ Mã giảm giá không hợp lệ hoặc đã hết hạn!", type: "error" });
             setDiscountAmount(0);
         }
     };
 
-    const processCheckout = () => {
+    const processCheckout = async () => {
+        if (isSubmitting) return;
         if (!cartKey) {
             alert("Vui lòng đăng nhập để đặt hàng!");
             navigate('/login');
@@ -206,6 +244,7 @@ const Cart = () => {
         const users = JSON.parse(localStorage.getItem('users')) || [];
         const userDb = users.find(u => u.email === currentUser.email);
         const userId = userDb ? userDb.id : Date.now();
+        setIsSubmitting(true);
 
         // 1. Tạo Address
         const newAddress = {
@@ -220,7 +259,7 @@ const Cart = () => {
             is_default: true,
             created_at: new Date().toISOString()
         };
-        const addresses = JSON.parse(localStorage.getItem('addresses')) || [];
+        const addresses = getLocalArray('addresses');
         addresses.push(newAddress);
         localStorage.setItem('addresses', JSON.stringify(addresses));
 
@@ -232,17 +271,17 @@ const Cart = () => {
             total_amount: finalTotal,
             status: 'PENDING',
             payment_method: paymentMethod,
-            payment_status: paymentMethod === 'ONLINE' ? 'PAID' : 'UNPAID',
+            payment_status: paymentMethod === 'VNPAY' ? 'PENDING' : 'UNPAID',
             address_snapshot: JSON.stringify(newAddress),
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString()
         };
-        const orders = JSON.parse(localStorage.getItem('orders')) || [];
+        const orders = getLocalArray('orders');
         orders.push(newOrder);
         localStorage.setItem('orders', JSON.stringify(orders));
 
         // 3. Tạo Order Items
-        const orderItemsList = JSON.parse(localStorage.getItem('order_items')) || [];
+        const orderItemsList = getLocalArray('order_items');
         cartItems.forEach((item, index) => {
             orderItemsList.push({
                 id: Date.now() + 10 + index,
@@ -256,17 +295,69 @@ const Cart = () => {
         localStorage.setItem('order_items', JSON.stringify(orderItemsList));
 
         // 4. Tạo Payment
-        const paymentsList = JSON.parse(localStorage.getItem('payments')) || [];
+        const paymentsList = getLocalArray('payments');
         paymentsList.push({
             id: Date.now() + 3,
             order_id: orderId,
             amount: finalTotal,
             method: paymentMethod,
-            status: paymentMethod === 'ONLINE' ? 'SUCCESS' : 'PENDING',
-            transaction_code: paymentMethod === 'ONLINE' ? `TXN${Date.now()}` : null,
+            status: 'PENDING',
+            transaction_code: null,
             created_at: new Date().toISOString()
         });
         localStorage.setItem('payments', JSON.stringify(paymentsList));
+
+        if (paymentMethod === 'VNPAY') {
+            try {
+                const response = await fetch(VNPAY_CREATE_PAYMENT_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        amount: Math.round(finalTotal),
+                        orderId: String(orderId),
+                        orderInfo: `Thanh toan don hang ${orderId}`,
+                        language: 'vn'
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`VNPAY create payment failed: ${response.status}`);
+                }
+
+                const data = await response.json();
+                if (!data?.paymentUrl) {
+                    throw new Error(data?.message || 'Khong nhan duoc paymentUrl tu VNPAY');
+                }
+
+                const paymentUrl = data.paymentUrl;
+                sessionStorage.setItem('pendingVnPayOrderId', String(data.orderId || orderId));
+                const updatedPayments = getLocalArray('payments').map(payment =>
+                    payment.order_id === orderId
+                        ? { ...payment, payment_url: paymentUrl, backend_order_id: data.orderId || String(orderId) }
+                        : payment
+                );
+                localStorage.setItem('payments', JSON.stringify(updatedPayments));
+
+                localStorage.removeItem(cartKey);
+                setCartItems([]);
+                window.dispatchEvent(new Event('cartUpdated'));
+                navigate(`/order-status/${orderId}`, {
+                    state: {
+                        orderId,
+                        paymentUrl,
+                        autoRedirect: true
+                    }
+                });
+                return;
+            } catch (error) {
+                console.error(error);
+                alert("Khong the khoi tao thanh toan VNPAY. Vui long thu lai hoac chon COD.");
+                setIsSubmitting(false);
+                return;
+            }
+        }
 
         if (paymentMethod === 'ONLINE') {
             alert("Đã nhận thanh toán qua mã QR. Đặt hàng thành công!");
@@ -278,7 +369,12 @@ const Cart = () => {
         localStorage.removeItem(cartKey);
         setCartItems([]);
         window.dispatchEvent(new Event('cartUpdated'));
-        navigate('/');
+        navigate(`/order-status/${orderId}`, {
+            state: {
+                orderId,
+                autoRedirect: false
+            }
+        });
     };
 
     return (
@@ -428,20 +524,19 @@ const Cart = () => {
                             <span>Thanh toán khi nhận hàng (COD)</span>
                         </label>
                         <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
-                            <input type="radio" name="payment" value="ONLINE" checked={paymentMethod === 'ONLINE'} onChange={() => setPaymentMethod('ONLINE')} style={{ marginRight: '10px' }} />
-                            <span>Quét mã QR thanh toán (Momo/ZaloPay/Banking)</span>
+                            <input type="radio" name="payment" value="VNPAY" checked={paymentMethod === 'VNPAY'} onChange={() => setPaymentMethod('VNPAY')} style={{ marginRight: '10px' }} />
+                            <span>Thanh toán qua VNPAY</span>
                         </label>
                         
-                        {paymentMethod === 'ONLINE' && (
+                        {paymentMethod === 'VNPAY' && (
                             <div style={{ marginTop: '15px', padding: '15px', background: '#f8f9fa', borderRadius: '8px', textAlign: 'center', border: '1px solid #ddd' }}>
-                                <img src="./src/assets/qr-code.png" alt="Mã QR Thanh Toán" style={{ width: '150px', height: '150px', objectFit: 'cover' }} />
-                                <p style={{ fontSize: '13px', color: '#555', marginTop: '10px' }}>Vui lòng quét mã QR để thanh toán. Hệ thống sẽ xác nhận tự động.</p>
+                                <p style={{ fontSize: '13px', color: '#555', margin: 0 }}>Bạn sẽ được chuyển sang cổng thanh toán VNPAY. Sau khi thanh toán, VNPAY sẽ gọi http://localhost:8080/api/payment/vnpay/return và backend trả về kết quả theo VnPayPaymentResult.</p>
                             </div>
                         )}
                     </div>
 
-                    <button onClick={processCheckout} style={{ width: '100%', padding: '12px', backgroundColor: 'var(--secondary-color)', color: 'white', border: 'none', borderRadius: '4px', fontWeight: 'bold', cursor: 'pointer', fontSize: '16px' }}>
-                        {paymentMethod === 'ONLINE' ? 'Đã Thanh Toán & Đặt Hàng' : 'Xác nhận Đặt hàng'}
+                    <button disabled={isSubmitting} onClick={processCheckout} style={{ width: '100%', padding: '12px', backgroundColor: 'var(--secondary-color)', color: 'white', border: 'none', borderRadius: '4px', fontWeight: 'bold', cursor: isSubmitting ? 'not-allowed' : 'pointer', fontSize: '16px', opacity: isSubmitting ? 0.7 : 1 }}>
+                        {isSubmitting ? 'Đang xử lý...' : paymentMethod === 'VNPAY' ? 'Thanh toán VNPAY' : 'Xác nhận Đặt hàng'}
                     </button>
                 </div>
             </div>

@@ -6,6 +6,8 @@ import Home from '../pages/Home';
 import Shop from '../pages/Shop';
 import ProductDetail from '../pages/ProductDetail';
 import Cart from '../pages/Cart';
+import OrderStatus from '../pages/OrderStatus';
+import UserOrders from '../pages/UserOrders';
 import Login from '../pages/Login';
 import Admin from '../pages/Admin';
 import Profile from '../pages/Profile';
@@ -19,6 +21,8 @@ const AppRoutes = () => {
           <Route path="shop" element={<Shop />} />
           <Route path="product/:id" element={<ProductDetail />} />
           <Route path="cart" element={<Cart />} />
+          <Route path="order-status/:orderId" element={<OrderStatus />} />
+          <Route path="orders" element={<UserOrders />} />
           <Route path="login" element={<Login />} />
           <Route path="profile" element={<Profile />} />
         </Route>

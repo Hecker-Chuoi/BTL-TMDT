@@ -1,14 +1,114 @@
-export const dbCategories = [
-    { id: 1, name: "Laptop", parent_id: null },
-    { id: 2, name: "Linh kiện PC", parent_id: null }
-];
-
 export const dbBrands = [
     { id: 1, name: "Apple", type: "laptop" },
     { id: 2, name: "MSI", type: "component" },
     { id: 3, name: "Corsair", type: "component" },
     { id: 4, name: "Asus", type: "both" },
     { id: 5, name: "Kingston", type: "component" }
+];
+
+const laptopSpecGroups = [
+    {
+        title: "Bộ xử lý",
+        items: [
+            { label: "Công nghệ CPU", value: "AMD Ryzen 5 - 7520U" },
+            { label: "Số nhân", value: "4" },
+            { label: "Số luồng", value: "8" },
+            { label: "Tốc độ CPU", value: "2.80 GHz (Lên đến 4.30 GHz khi tải nặng)" }
+        ]
+    },
+    {
+        title: "Đồ hoạ (GPU)",
+        items: [
+            { label: "Card màn hình", value: "Card tích hợp - AMD Radeon 610M Graphics" }
+        ]
+    },
+    {
+        title: "Bộ nhớ RAM, Ổ cứng",
+        items: [
+            { label: "RAM", value: "16 GB" },
+            { label: "Loại RAM", value: "LPDDR5 (Onboard)" },
+            { label: "Tốc độ Bus RAM", value: "5500 MHz" },
+            { label: "Hỗ trợ RAM tối đa", value: "16 GB" },
+            { label: "Ổ cứng", value: "512 GB SSD M.2 NVMe PCIe" }
+        ]
+    },
+    {
+        title: "Màn hình",
+        items: [
+            { label: "Kích thước màn hình", value: "15.6 inch" },
+            { label: "Độ phân giải", value: "Full HD (1920 x 1080)" },
+            { label: "Tấm nền", value: "Hãng không công bố" },
+            { label: "Tần số quét", value: "Hãng không công bố" },
+            { label: "Độ phủ màu", value: "45% NTSC" },
+            { label: "Công nghệ màn hình", value: "Micro-edge, Chống chói Anti Glare, 250 nits" }
+        ]
+    },
+    {
+        title: "Cổng kết nối & tính năng mở rộng",
+        items: [
+            { label: "Cổng giao tiếp", value: "2 x USB Type-A, 1 x USB Type-C (chỉ hỗ trợ truyền dữ liệu), 1 x Headphone/microphone combo, HDMI 1.4" },
+            { label: "Kết nối không dây", value: "Wi-Fi 6 (2 x 2), Bluetooth 5.4" },
+            { label: "Webcam", value: "HP True Vision 720p HD camera" },
+            { label: "Đèn bàn phím", value: "Không có đèn" },
+            { label: "Bảo mật", value: "TPM 2.0, Công tắc khoá camera" },
+            { label: "Công nghệ âm thanh", value: "Dual speakers" },
+            { label: "Tản nhiệt", value: "Hãng không công bố" }
+        ]
+    },
+    {
+        title: "Kích thước - Khối lượng - Pin",
+        items: [
+            { label: "Thông tin Pin", value: "3-cell Li-ion, 41 Wh" },
+            { label: "Hệ điều hành", value: "Windows 11 Home SL" },
+            { label: "Thời điểm ra mắt", value: "2025" },
+            { label: "Kích thước", value: "Dài 359.8 mm - Rộng 236 mm - Dày 18.6 mm - 1.59 kg" },
+            { label: "Chất liệu", value: "Vỏ nhựa" }
+        ]
+    }
+];
+
+const componentSpecGroups = [
+    {
+        title: "Thông tin chung",
+        items: [
+            { label: "Loại linh kiện" },
+            { label: "Thương hiệu" },
+            { label: "Bảo hành" }
+        ]
+    },
+    {
+        title: "Hiệu năng",
+        items: [
+            { label: "Chuẩn kết nối" },
+            { label: "Dung lượng / Bộ nhớ" },
+            { label: "Tốc độ" }
+        ]
+    },
+    {
+        title: "Tương thích",
+        items: [
+            { label: "Thiết bị hỗ trợ" },
+            { label: "Yêu cầu hệ thống" }
+        ]
+    }
+];
+
+export const dbCategories = [
+    {
+        id: 1,
+        name: "Laptop",
+        parent_id: null,
+        specGroups: laptopSpecGroups.map(group => ({
+            title: group.title,
+            items: group.items.map(item => ({ label: item.label }))
+        }))
+    },
+    {
+        id: 2,
+        name: "Linh kiện PC",
+        parent_id: null,
+        specGroups: componentSpecGroups
+    }
 ];
 
 const defaultProducts = [
@@ -29,7 +129,8 @@ const defaultProducts = [
             { id: 1, spec_key: "CPU", spec_value: "Apple M1 8-core" },
             { id: 2, spec_key: "RAM", spec_value: "8GB Unified Memory" },
             { id: 3, spec_key: "Ổ cứng", spec_value: "256GB SSD" }
-        ]
+        ],
+        specGroups: laptopSpecGroups
     },
     { 
         id: 2, 
@@ -80,7 +181,8 @@ const defaultProducts = [
         specs: [
             { id: 8, spec_key: "CPU", spec_value: "Intel Core i7-12700H" },
             { id: 9, spec_key: "VGA", spec_value: "RTX 3060 6GB" }
-        ]
+        ],
+        specGroups: laptopSpecGroups
     },
     {
         id: 5,
@@ -96,7 +198,8 @@ const defaultProducts = [
             { id: 10, spec_key: "CPU", spec_value: "Apple M3 Pro 12-core" },
             { id: 11, spec_key: "RAM", spec_value: "18GB Unified Memory" },
             { id: 12, spec_key: "Ổ cứng", spec_value: "512GB SSD" }
-        ]
+        ],
+        specGroups: laptopSpecGroups
     },
     {
         id: 6,
@@ -112,7 +215,8 @@ const defaultProducts = [
             { id: 13, spec_key: "CPU", spec_value: "Intel Core i7-13700H" },
             { id: 14, spec_key: "RAM", spec_value: "16GB DDR5" },
             { id: 15, spec_key: "Ổ cứng", spec_value: "512GB SSD" }
-        ]
+        ],
+        specGroups: laptopSpecGroups
     },
     {
         id: 7,
@@ -128,7 +232,8 @@ const defaultProducts = [
             { id: 16, spec_key: "CPU", spec_value: "Intel Core i7-1365U" },
             { id: 17, spec_key: "RAM", spec_value: "16GB LPDDR5" },
             { id: 18, spec_key: "Màn hình", spec_value: "14 inch 2.8K OLED" }
-        ]
+        ],
+        specGroups: laptopSpecGroups
     },
     {
         id: 8,
@@ -189,7 +294,8 @@ const defaultProducts = [
             { id: 25, spec_key: "CPU", spec_value: "Intel Core Ultra 7 155H" },
             { id: 26, spec_key: "RAM", spec_value: "16GB LPDDR5" },
             { id: 27, spec_key: "Màn hình", spec_value: "14 inch 2.8K OLED Cảm ứng" }
-        ]
+        ],
+        specGroups: laptopSpecGroups
     },
     {
         id: 12,
@@ -221,6 +327,23 @@ export const getDB = () => {
         if (parsed.length < defaultProducts.length) {
             localStorage.setItem('globalProducts', JSON.stringify(defaultProducts));
             return defaultProducts;
+        }
+        let shouldUpdateStoredProducts = false;
+        const productsWithLatestDefaults = parsed.map(product => {
+            const defaultProduct = defaultProducts.find(item => item.id === product.id);
+            if (defaultProduct?.specGroups?.length && !product.specGroups?.length) {
+                shouldUpdateStoredProducts = true;
+                return {
+                    ...product,
+                    specGroups: defaultProduct.specGroups
+                };
+            }
+            return product;
+        });
+
+        if (shouldUpdateStoredProducts) {
+            localStorage.setItem('globalProducts', JSON.stringify(productsWithLatestDefaults));
+            return productsWithLatestDefaults;
         }
         return parsed;
     } catch {
@@ -300,6 +423,66 @@ export const getFlashSale = () => {
 
 export const setFlashSale = (flashSaleData) => {
     localStorage.setItem('flashSale', JSON.stringify(flashSaleData));
+};
+
+const defaultCoupons = [
+    {
+        id: 1,
+        code: 'SINHVIENIT',
+        discount_type: 'percent',
+        discount_value: 10,
+        start_date: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+        end_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+        scope_type: 'all',
+        product_ids: [],
+        target_type: 'all',
+        user_ids: [],
+        status: 'ACTIVE'
+    },
+    {
+        id: 2,
+        code: 'GIAM50K',
+        discount_type: 'fixed',
+        discount_value: 50000,
+        start_date: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+        end_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+        scope_type: 'all',
+        product_ids: [],
+        target_type: 'all',
+        user_ids: [],
+        status: 'ACTIVE'
+    },
+    {
+        id: 3,
+        code: 'FREESHIP',
+        discount_type: 'fixed',
+        discount_value: 30000,
+        start_date: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+        end_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+        scope_type: 'all',
+        product_ids: [],
+        target_type: 'all',
+        user_ids: [],
+        status: 'ACTIVE'
+    }
+];
+
+export const getCoupons = () => {
+    try {
+        const stored = localStorage.getItem('coupons');
+        if (!stored) {
+            localStorage.setItem('coupons', JSON.stringify(defaultCoupons));
+            return defaultCoupons;
+        }
+        const parsed = JSON.parse(stored);
+        return Array.isArray(parsed) ? parsed : defaultCoupons;
+    } catch {
+        return defaultCoupons;
+    }
+};
+
+export const setCoupons = (coupons) => {
+    localStorage.setItem('coupons', JSON.stringify(coupons));
 };
 
 export const getFlashSaleDiscountForProduct = (productId) => {
@@ -718,7 +901,22 @@ const initMockData = () => {
     }
     
     // 4. Các bảng relational khác
-    if (!localStorage.getItem('categories')) localStorage.setItem('categories', JSON.stringify(dbCategories));
+    if (!localStorage.getItem('categories')) {
+        localStorage.setItem('categories', JSON.stringify(dbCategories));
+    } else {
+        const storedCategories = JSON.parse(localStorage.getItem('categories')) || [];
+        const categoriesWithSpecs = storedCategories.map(category => {
+            const defaultCategory = dbCategories.find(item => item.id === category.id);
+            if (defaultCategory?.specGroups?.length && !category.specGroups?.length) {
+                return {
+                    ...category,
+                    specGroups: defaultCategory.specGroups
+                };
+            }
+            return category;
+        });
+        localStorage.setItem('categories', JSON.stringify(categoriesWithSpecs));
+    }
     if (!localStorage.getItem('brands')) localStorage.setItem('brands', JSON.stringify(dbBrands));
     if (!localStorage.getItem('addresses')) localStorage.setItem('addresses', JSON.stringify([]));
     if (!localStorage.getItem('orders')) localStorage.setItem('orders', JSON.stringify([]));

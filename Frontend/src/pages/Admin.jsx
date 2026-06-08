@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { getDB, setDB, getMainImage, formatMoney, dbBrands, getFlashSale, setFlashSale, getBannerSettings, setBannerSettings, getItemsPerPage, setItemsPerPage, getFlashSaleItemsPerPage, setFlashSaleItemsPerPage } from '../utils/mockData';
+import { getDB, setDB, getMainImage, formatMoney, dbBrands, getFlashSale, setFlashSale, getBannerSettings, setBannerSettings, getItemsPerPage, setItemsPerPage, getFlashSaleItemsPerPage, setFlashSaleItemsPerPage, getCoupons, setCoupons } from '../utils/mockData';
 import { useNavigate } from 'react-router-dom';
+import { readSupportConversations, sendSupportMessage, subscribeSupportConversations } from '../utils/supportChat';
 
 const Admin = () => {
     const [products, setProducts] = useState(() => getDB());
@@ -14,17 +15,45 @@ const Admin = () => {
     const [filterCategory, setFilterCategory] = useState('all'); // 'all' | '1' | '2'
     
     // Data state
-    const [categories] = useState(() => JSON.parse(localStorage.getItem('categories')) || []);
+
+    // const [categories, setCategories] = useState([]);
+    const [brands, setBrands] = useState([]);
+    // const [orders, setOrders] = useState([]);
+    // const [customers, setCustomers] = useState([]);
+    const [flashSale, setFlashSaleState] = useState(null);
+    const [editingCategoryId, setEditingCategoryId] = useState(null);
+    const [categoryName, setCategoryName] = useState('');
+    const [categorySpecGroups, setCategorySpecGroups] = useState([
+        { title: '', items: [{ label: '' }] }
+    ]);
+    const [categories, setCategories] = useState(() => JSON.parse(localStorage.getItem('categories')) || []);
     const [orders, setOrders] = useState(() => JSON.parse(localStorage.getItem('orders')) || []);
     const [orderItems] = useState(() => JSON.parse(localStorage.getItem('order_items')) || []);
     const [payments] = useState(() => JSON.parse(localStorage.getItem('payments')) || []);
-    const [customers] = useState(() => {
+    const [customers, setCustomers] = useState(() => {
         const users = JSON.parse(localStorage.getItem('users')) || [];
         return users.filter(user => user.role === 'USER');
     });
     const [reviews] = useState(() => JSON.parse(localStorage.getItem('productReviews')) || []);
     const [reviewProductFilter, setReviewProductFilter] = useState('all');
     const [reviewRatingFilter, setReviewRatingFilter] = useState('all');
+    const [supportConversations, setSupportConversations] = useState(() => readSupportConversations());
+    const [activeSupportConversationId, setActiveSupportConversationId] = useState(() => readSupportConversations()[0]?.id || null);
+    const [supportReply, setSupportReply] = useState('');
+    const [coupons, setCouponsState] = useState(() => getCoupons());
+    const [editingCouponId, setEditingCouponId] = useState(null);
+    const [couponForm, setCouponForm] = useState({
+        code: '',
+        discount_type: 'percent',
+        discount_value: '',
+        start_date: '',
+        end_date: '',
+        scope_type: 'all',
+        product_ids: [],
+        target_type: 'all',
+        user_ids: [],
+        status: 'ACTIVE'
+    });
 
     // Interface settings state
     const [itemsPerPageValue, setItemsPerPageValue] = useState(() => String(getItemsPerPage()));
@@ -61,7 +90,7 @@ const Admin = () => {
     const [formSpecs, setFormSpecs] = useState([
         { spec_key: '', spec_value: '' }
     ]);
-    const [adminProfile] = useState(() => JSON.parse(sessionStorage.getItem('currentUser'))?.name || 'Admin');
+    const [adminProfile, setAdminProfile] = useState(() => JSON.parse(sessionStorage.getItem('currentUser'))?.name || 'Admin');
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -71,11 +100,58 @@ const Admin = () => {
             navigate('/login');
             return;
         }
+
+        const dbData = getDB();
+        setProducts(dbData);
+        setAdminProfile(user.name);
+        
+        setCategories(JSON.parse(localStorage.getItem('categories')) || []);
+        setBrands(JSON.parse(localStorage.getItem('brands')) || []);
+        setOrders(JSON.parse(localStorage.getItem('orders')) || []);
+        
+        // Load customers (users with role = 'USER')
+        const users = JSON.parse(localStorage.getItem('users')) || [];
+        const userCustomers = users.filter(u => u.role === 'USER');
+        setCustomers(userCustomers);
+        
+        // Load flash sale data
+        const flashSaleData = getFlashSale();
+        setFlashSaleState(flashSaleData);
+        setFlashSaleDiscountPercent(String(flashSaleData.discount_percent || 20));
+        setFlashSaleStartTime(flashSaleData.start_time ? flashSaleData.start_time.substring(0, 16) : '');
+        setFlashSaleEndTime(flashSaleData.end_time ? flashSaleData.end_time.substring(0, 16) : '');
+        setFlashSaleSelectedProducts(flashSaleData.product_ids || []);
+
+        // Load UI settings
+        const itemsPerPage = getItemsPerPage();
+        setItemsPerPageValue(String(itemsPerPage));
+        
+        const flashSaleItemsPerPage = getFlashSaleItemsPerPage();
+        setFlashSaleItemsPerPageValue(String(flashSaleItemsPerPage));
+        
+        const banners = getBannerSettings();
+        setBannerSettingsState(banners);
     }, [navigate]);
+
+    useEffect(() => {
+        return subscribeSupportConversations((conversations) => {
+            setSupportConversations(conversations);
+            setActiveSupportConversationId(prev => prev || conversations[0]?.id || null);
+        });
+    }, []);
 
     const handleLogout = () => {
         localStorage.removeItem('currentUser');
         navigate('/login');
+    };
+
+    const handleSupportReply = (e) => {
+        e.preventDefault();
+        const text = supportReply.trim();
+        if (!text || !activeSupportConversationId) return;
+
+        sendSupportMessage(activeSupportConversationId, 'admin', text);
+        setSupportReply('');
     };
 
     const handleDelete = (id) => {
@@ -89,6 +165,137 @@ const Admin = () => {
                 setCurrentPage(Math.max(1, currentPage - 1));
             }
         }
+    };
+
+    const resetCategoryForm = () => {
+        setEditingCategoryId(null);
+        setCategoryName('');
+        setCategorySpecGroups([{ title: '', items: [{ label: '' }] }]);
+    };
+
+    const saveCategories = (updatedCategories) => {
+        setCategories(updatedCategories);
+        localStorage.setItem('categories', JSON.stringify(updatedCategories));
+    };
+
+    const handleEditCategory = (category) => {
+        setEditingCategoryId(category.id);
+        setCategoryName(category.name);
+        setCategorySpecGroups(
+            category.specGroups && category.specGroups.length > 0
+                ? category.specGroups.map(group => ({
+                    title: group.title || '',
+                    items: group.items && group.items.length > 0
+                        ? group.items.map(item => ({ label: item.label || '' }))
+                        : [{ label: '' }]
+                }))
+                : [{ title: '', items: [{ label: '' }] }]
+        );
+    };
+
+    const handleDeleteCategory = (categoryId) => {
+        const productCount = products.filter(product => product.category_id === categoryId).length;
+        if (productCount > 0) {
+            alert("Không thể xóa danh mục đang có sản phẩm!");
+            return;
+        }
+
+        if (window.confirm("Bạn có chắc chắn muốn xóa danh mục này?")) {
+            const updatedCategories = categories.filter(category => category.id !== categoryId);
+            saveCategories(updatedCategories);
+            if (filterCategory === String(categoryId)) setFilterCategory('all');
+            if (editingCategoryId === categoryId) resetCategoryForm();
+            alert("Xóa danh mục thành công!");
+        }
+    };
+
+    const handleCategorySubmit = (e) => {
+        e.preventDefault();
+        const name = categoryName.trim();
+        if (!name) {
+            alert("Vui lòng nhập tên danh mục!");
+            return;
+        }
+
+        const cleanedSpecGroups = categorySpecGroups
+            .map(group => ({
+                title: group.title.trim(),
+                items: (group.items || [])
+                    .map(item => ({ label: item.label.trim() }))
+                    .filter(item => item.label)
+            }))
+            .filter(group => group.title && group.items.length > 0);
+
+        if (cleanedSpecGroups.length === 0) {
+            alert("Vui lòng thêm ít nhất 1 nhóm và 1 thông số kỹ thuật!");
+            return;
+        }
+
+        let updatedCategories;
+        if (editingCategoryId) {
+            updatedCategories = categories.map(category =>
+                category.id === editingCategoryId
+                    ? { ...category, name, specGroups: cleanedSpecGroups }
+                    : category
+            );
+            alert("Cập nhật danh mục thành công!");
+        } else {
+            const newCategory = {
+                id: categories.length > 0 ? Math.max(...categories.map(category => category.id)) + 1 : 1,
+                name,
+                parent_id: null,
+                specGroups: cleanedSpecGroups
+            };
+            updatedCategories = [...categories, newCategory];
+            alert("Thêm danh mục thành công!");
+        }
+
+        saveCategories(updatedCategories);
+        resetCategoryForm();
+    };
+
+    const updateCategorySpecGroupTitle = (groupIndex, value) => {
+        setCategorySpecGroups(prev => prev.map((group, index) =>
+            index === groupIndex ? { ...group, title: value } : group
+        ));
+    };
+
+    const updateCategorySpecLabel = (groupIndex, itemIndex, value) => {
+        setCategorySpecGroups(prev => prev.map((group, index) => {
+            if (index !== groupIndex) return group;
+            return {
+                ...group,
+                items: group.items.map((item, childIndex) =>
+                    childIndex === itemIndex ? { ...item, label: value } : item
+                )
+            };
+        }));
+    };
+
+    const addCategorySpecGroup = () => {
+        setCategorySpecGroups(prev => [...prev, { title: '', items: [{ label: '' }] }]);
+    };
+
+    const removeCategorySpecGroup = (groupIndex) => {
+        setCategorySpecGroups(prev => prev.filter((_, index) => index !== groupIndex));
+    };
+
+    const addCategorySpecItem = (groupIndex) => {
+        setCategorySpecGroups(prev => prev.map((group, index) =>
+            index === groupIndex
+                ? { ...group, items: [...group.items, { label: '' }] }
+                : group
+        ));
+    };
+
+    const removeCategorySpecItem = (groupIndex, itemIndex) => {
+        setCategorySpecGroups(prev => prev.map((group, index) => {
+            if (index !== groupIndex) return group;
+            return {
+                ...group,
+                items: group.items.filter((_, childIndex) => childIndex !== itemIndex)
+            };
+        }));
     };
 
     const resetForm = () => {
@@ -130,110 +337,6 @@ const Admin = () => {
         localStorage.setItem('orders', JSON.stringify(updatedOrders));
     };
 
-    const getCustomerById = (userId) => {
-        return customers.find(customer => customer.id === userId) || null;
-    };
-
-    const getCustomerName = (userId) => {
-        return getCustomerById(userId)?.full_name || 'Khách hàng không xác định';
-    };
-
-    const getProductNameById = (productId) => {
-        return products.find(product => product.id === productId)?.name || `Sản phẩm #${productId}`;
-    };
-
-    const getOrderItemsByOrderId = (orderId) => {
-        return orderItems.filter(item => item.order_id === orderId);
-    };
-
-    const getPaymentMethodLabel = (paymentMethod) => {
-        return paymentMethod === 'ONLINE' ? 'Chuyển khoản (QR)' : 'Tiền mặt (COD)';
-    };
-
-    const getPaymentStatusMeta = (status) => {
-        if (status === 'SUCCESS') {
-            return { label: 'Thành công', background: '#27ae60' };
-        }
-        if (status === 'PENDING') {
-            return { label: 'Chờ xử lý', background: '#f39c12' };
-        }
-        return { label: status || 'Không xác định', background: '#7f8c8d' };
-    };
-
-    const getOrderStatusMeta = (status) => {
-        if (status === 'CONFIRMED') {
-            return { label: 'Đã duyệt', background: '#27ae60' };
-        }
-        if (status === 'PENDING') {
-            return { label: 'Chờ duyệt', background: '#f39c12' };
-        }
-        if (status === 'CANCELLED') {
-            return { label: 'Đã hủy', background: '#e74c3c' };
-        }
-        return { label: status || 'Không xác định', background: '#7f8c8d' };
-    };
-
-    const formatDateTime = (dateValue) => {
-        if (!dateValue) return 'N/A';
-        return new Date(dateValue).toLocaleString('vi-VN');
-    };
-
-    const formatShortDate = (dateValue) => {
-        if (!dateValue) return 'N/A';
-        return new Date(dateValue).toLocaleDateString('vi-VN');
-    };
-
-    const confirmedOrders = orders.filter(order => order.status === 'CONFIRMED');
-    const pendingOrders = orders.filter(order => order.status === 'PENDING');
-    const paymentHistory = [...payments].sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
-    const totalRevenue = confirmedOrders.reduce((sum, order) => sum + Number(order.total_amount || 0), 0);
-    const successfulPaymentRevenue = payments
-        .filter(payment => payment.status === 'SUCCESS')
-        .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
-    const pendingRevenue = pendingOrders.reduce((sum, order) => sum + Number(order.total_amount || 0), 0);
-    const todayRevenue = confirmedOrders
-        .filter(order => {
-            if (!order.created_at) return false;
-            return new Date(order.created_at).toDateString() === new Date().toDateString();
-        })
-        .reduce((sum, order) => sum + Number(order.total_amount || 0), 0);
-    const revenueByMethod = ['COD', 'ONLINE'].map(method => ({
-        method,
-        label: getPaymentMethodLabel(method),
-        amount: confirmedOrders
-            .filter(order => order.payment_method === method)
-            .reduce((sum, order) => sum + Number(order.total_amount || 0), 0),
-        count: confirmedOrders.filter(order => order.payment_method === method).length
-    }));
-    const topSellingProducts = Object.values(
-        orderItems.reduce((accumulator, item) => {
-            if (!accumulator[item.product_id]) {
-                accumulator[item.product_id] = {
-                    product_id: item.product_id,
-                    product_name: getProductNameById(item.product_id),
-                    quantity: 0,
-                    revenue: 0
-                };
-            }
-
-            accumulator[item.product_id].quantity += Number(item.quantity || 0);
-            accumulator[item.product_id].revenue += Number(item.price || 0) * Number(item.quantity || 0);
-            return accumulator;
-        }, {})
-    )
-        .sort((a, b) => b.quantity - a.quantity)
-        .slice(0, 5);
-
-    const filteredReviews = [...reviews]
-        .filter(review => reviewProductFilter === 'all' || String(review.product_id) === reviewProductFilter)
-        .filter(review => reviewRatingFilter === 'all' || String(review.rating) === reviewRatingFilter)
-        .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
-    const averageReviewRating = reviews.length > 0
-        ? (reviews.reduce((sum, review) => sum + Number(review.rating || 0), 0) / reviews.length).toFixed(1)
-        : '0.0';
-    const fiveStarReviews = reviews.filter(review => Number(review.rating) === 5).length;
-    const lowRatingReviews = reviews.filter(review => Number(review.rating) <= 2).length;
-
     const handleFlashSaleSubmit = (e) => {
         e.preventDefault();
         
@@ -250,6 +353,7 @@ const Admin = () => {
         };
 
         setFlashSale(updatedFlashSale);
+        setFlashSaleState(updatedFlashSale);
         alert("Cập nhật Flash Sale thành công!");
     };
 
@@ -340,6 +444,107 @@ const Admin = () => {
         }
     };
 
+    const resetCouponForm = () => {
+        setEditingCouponId(null);
+        setCouponForm({
+            code: '',
+            discount_type: 'percent',
+            discount_value: '',
+            start_date: '',
+            end_date: '',
+            scope_type: 'all',
+            product_ids: [],
+            target_type: 'all',
+            user_ids: [],
+            status: 'ACTIVE'
+        });
+    };
+
+    const saveCoupons = (updatedCoupons) => {
+        setCouponsState(updatedCoupons);
+        setCoupons(updatedCoupons);
+    };
+
+    const handleCouponMultiSelect = (field, values) => {
+        setCouponForm({
+            ...couponForm,
+            [field]: values.map(value => Number(value))
+        });
+    };
+
+    const handleCouponSubmit = (e) => {
+        e.preventDefault();
+        const code = couponForm.code.trim().toUpperCase();
+        const discountValue = Number(couponForm.discount_value);
+
+        if (!code || !discountValue || discountValue <= 0 || !couponForm.start_date || !couponForm.end_date) {
+            alert("Vui lòng nhập đầy đủ thông tin coupon!");
+            return;
+        }
+        if (couponForm.discount_type === 'percent' && discountValue > 100) {
+            alert("Mức giảm phần trăm không được vượt quá 100%!");
+            return;
+        }
+        if (new Date(couponForm.start_date) >= new Date(couponForm.end_date)) {
+            alert("Thời hạn kết thúc phải sau thời gian bắt đầu!");
+            return;
+        }
+        if (couponForm.scope_type === 'products' && couponForm.product_ids.length === 0) {
+            alert("Vui lòng chọn ít nhất một sản phẩm cho phạm vi coupon!");
+            return;
+        }
+        if (couponForm.target_type === 'users' && couponForm.user_ids.length === 0) {
+            alert("Vui lòng chọn ít nhất một khách hàng cho đối tượng coupon!");
+            return;
+        }
+        if (coupons.some(coupon => coupon.code.toUpperCase() === code && coupon.id !== editingCouponId)) {
+            alert("Mã coupon đã tồn tại!");
+            return;
+        }
+
+        const couponPayload = {
+            ...couponForm,
+            code,
+            discount_value: discountValue,
+            start_date: new Date(couponForm.start_date).toISOString(),
+            end_date: new Date(couponForm.end_date).toISOString(),
+            product_ids: couponForm.scope_type === 'products' ? couponForm.product_ids : [],
+            user_ids: couponForm.target_type === 'users' ? couponForm.user_ids : []
+        };
+        const updatedCoupons = editingCouponId
+            ? coupons.map(coupon => coupon.id === editingCouponId ? { ...coupon, ...couponPayload } : coupon)
+            : [...coupons, { ...couponPayload, id: Date.now() }];
+
+        saveCoupons(updatedCoupons);
+        const successMessage = editingCouponId ? "Cập nhật coupon thành công!" : "Thêm coupon thành công!";
+        resetCouponForm();
+        alert(successMessage);
+    };
+
+    const handleEditCoupon = (coupon) => {
+        setEditingCouponId(coupon.id);
+        setCouponForm({
+            code: coupon.code,
+            discount_type: coupon.discount_type,
+            discount_value: String(coupon.discount_value),
+            start_date: coupon.start_date ? coupon.start_date.substring(0, 16) : '',
+            end_date: coupon.end_date ? coupon.end_date.substring(0, 16) : '',
+            scope_type: coupon.scope_type || 'all',
+            product_ids: coupon.product_ids || [],
+            target_type: coupon.target_type || 'all',
+            user_ids: coupon.user_ids || [],
+            status: coupon.status || 'ACTIVE'
+        });
+    };
+
+    const handleDeleteCoupon = (couponId) => {
+        if (window.confirm("Bạn có chắc chắn muốn xóa coupon này?")) {
+            saveCoupons(coupons.filter(coupon => coupon.id !== couponId));
+            if (editingCouponId === couponId) resetCouponForm();
+            alert("Xóa coupon thành công!");
+        }
+    };
+
     const handleImageChange = (e) => {
         const file = e.target.files[0];
         if (!file) return;
@@ -414,6 +619,104 @@ const Admin = () => {
         }
     };
 
+    const getCustomerById = (userId) => {
+        return customers.find(customer => customer.id === userId) || null;
+    };
+
+    const getCustomerName = (userId) => {
+        return getCustomerById(userId)?.full_name || getCustomerById(userId)?.name || 'Khách hàng không xác định';
+    };
+
+    const getProductNameById = (productId) => {
+        return products.find(product => product.id === productId)?.name || `Sản phẩm #${productId}`;
+    };
+
+    const getOrderItemsByOrderId = (orderId) => {
+        return orderItems.filter(item => item.order_id === orderId);
+    };
+
+    const getPaymentMethodLabel = (paymentMethod) => {
+        return paymentMethod === 'ONLINE' ? 'Chuyển khoản (QR)' : 'Tiền mặt (COD)';
+    };
+
+    const getPaymentStatusMeta = (status) => {
+        if (status === 'SUCCESS') return { label: 'Thành công', background: '#27ae60' };
+        if (status === 'PENDING') return { label: 'Chờ xử lý', background: '#f39c12' };
+        if (status === 'FAILED') return { label: 'Thất bại', background: '#e74c3c' };
+        return { label: status || 'Không xác định', background: '#7f8c8d' };
+    };
+
+    const getOrderStatusMeta = (status) => {
+        if (status === 'CONFIRMED') return { label: 'Đã duyệt', background: '#27ae60' };
+        if (status === 'PENDING') return { label: 'Chờ duyệt', background: '#f39c12' };
+        if (status === 'CANCELLED') return { label: 'Đã hủy', background: '#e74c3c' };
+        return { label: status || 'Không xác định', background: '#7f8c8d' };
+    };
+
+    const formatDateTime = (dateValue) => {
+        if (!dateValue) return 'N/A';
+        return new Date(dateValue).toLocaleString('vi-VN');
+    };
+
+    const formatShortDate = (dateValue) => {
+        if (!dateValue) return 'N/A';
+        return new Date(dateValue).toLocaleDateString('vi-VN');
+    };
+
+    const confirmedOrders = orders.filter(order => order.status === 'CONFIRMED');
+    const pendingOrders = orders.filter(order => order.status === 'PENDING');
+    const paymentHistory = [...payments].sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+    const totalRevenue = confirmedOrders.reduce((sum, order) => sum + Number(order.total_amount || 0), 0);
+    const successfulPaymentRevenue = payments
+        .filter(payment => payment.status === 'SUCCESS')
+        .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+    const pendingRevenue = pendingOrders.reduce((sum, order) => sum + Number(order.total_amount || 0), 0);
+    const todayRevenue = confirmedOrders
+        .filter(order => formatShortDate(order.updated_at || order.created_at) === formatShortDate(new Date()))
+        .reduce((sum, order) => sum + Number(order.total_amount || 0), 0);
+    const revenueByMethod = ['ONLINE', 'COD'].map(method => {
+        const ordersByMethod = confirmedOrders.filter(order => order.payment_method === method);
+        return {
+            method,
+            label: getPaymentMethodLabel(method),
+            amount: ordersByMethod.reduce((sum, order) => sum + Number(order.total_amount || 0), 0),
+            count: ordersByMethod.length
+        };
+    });
+    const confirmedOrderIds = new Set(confirmedOrders.map(order => order.id));
+    const topSellingProducts = Object.values(
+        orderItems
+            .filter(item => confirmedOrderIds.has(item.order_id))
+            .reduce((acc, item) => {
+                const productId = item.product_id;
+                if (!acc[productId]) {
+                    const product = products.find(p => p.id === productId);
+                    acc[productId] = {
+                        product_id: productId,
+                        product_name: item.product_name || product?.name || `Sản phẩm #${productId}`,
+                        quantity: 0,
+                        revenue: 0
+                    };
+                }
+                const quantity = Number(item.quantity || 0);
+                const price = Number(item.price || products.find(p => p.id === productId)?.price || 0);
+                acc[productId].quantity += quantity;
+                acc[productId].revenue += price * quantity;
+                return acc;
+            }, {})
+    )
+        .sort((a, b) => b.quantity - a.quantity)
+        .slice(0, 5);
+    const filteredReviews = [...reviews]
+        .filter(review => reviewProductFilter === 'all' || String(review.product_id) === reviewProductFilter)
+        .filter(review => reviewRatingFilter === 'all' || String(review.rating) === reviewRatingFilter)
+        .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+    const averageReviewRating = reviews.length > 0
+        ? (reviews.reduce((sum, review) => sum + Number(review.rating || 0), 0) / reviews.length).toFixed(1)
+        : '0.0';
+    const fiveStarReviews = reviews.filter(review => Number(review.rating) === 5).length;
+    const lowRatingReviews = reviews.filter(review => Number(review.rating) <= 2).length;
+
     // Filter + Pagination
     const filteredProducts = filterCategory === 'all'
         ? products
@@ -431,11 +734,16 @@ const Admin = () => {
     const getFilteredBrands = () => {
         const categoryMap = { '1': 'laptop', '2': 'component' };
         const categoryType = categoryMap[formCategory];
-        
+
+        if (!categoryType) return dbBrands;
+
         return dbBrands.filter(brand => 
             brand.type === categoryType || brand.type === 'both'
         );
     };
+
+    const sortedSupportConversations = [...supportConversations].sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
+    const activeSupportConversation = sortedSupportConversations.find(item => item.id === activeSupportConversationId) || sortedSupportConversations[0] || null;
 
     return (
         <div className="admin-body">
@@ -445,12 +753,15 @@ const Admin = () => {
                 </div>
                 <ul className="admin-nav-menu">
                     <li><a href="#" className={`admin-nav-item ${currentTab === 'products' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setCurrentTab('products'); }} style={{ whiteSpace: 'nowrap' }}><i className="fas fa-box"></i>{isSidebarOpen && ' Quản lý Sản phẩm'}</a></li>
+                    <li><a href="#" className={`admin-nav-item ${currentTab === 'categories' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setCurrentTab('categories'); }} style={{ whiteSpace: 'nowrap' }}><i className="fas fa-tags"></i>{isSidebarOpen && ' Quản lý danh mục'}</a></li>
                     <li><a href="#" className={`admin-nav-item ${currentTab === 'flashsale' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setCurrentTab('flashsale'); }} style={{ whiteSpace: 'nowrap' }}><i className="fas fa-bolt"></i>{isSidebarOpen && ' Flash Sale'}</a></li>
+                    <li><a href="#" className={`admin-nav-item ${currentTab === 'coupons' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setCurrentTab('coupons'); }} style={{ whiteSpace: 'nowrap' }}><i className="fas fa-ticket-alt"></i>{isSidebarOpen && ' Coupon'}</a></li>
                     <li><a href="#" className={`admin-nav-item ${currentTab === 'interface' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setCurrentTab('interface'); }} style={{ whiteSpace: 'nowrap' }}><i className="fas fa-sliders-h"></i>{isSidebarOpen && ' Quản lý Giao diện'}</a></li>
                     <li><a href="#" className={`admin-nav-item ${currentTab === 'orders' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setCurrentTab('orders'); }} style={{ whiteSpace: 'nowrap' }}><i className="fas fa-shopping-cart"></i>{isSidebarOpen && ' Quản lý Đơn hàng'}</a></li>
                     <li><a href="#" className={`admin-nav-item ${currentTab === 'revenue' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setCurrentTab('revenue'); }} style={{ whiteSpace: 'nowrap' }}><i className="fas fa-chart-line"></i>{isSidebarOpen && ' Doanh thu'}</a></li>
                     <li><a href="#" className={`admin-nav-item ${currentTab === 'reviews' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setCurrentTab('reviews'); }} style={{ whiteSpace: 'nowrap' }}><i className="fas fa-star"></i>{isSidebarOpen && ' Đánh giá'}</a></li>
                     <li><a href="#" className={`admin-nav-item ${currentTab === 'customers' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setCurrentTab('customers'); }} style={{ whiteSpace: 'nowrap' }}><i className="fas fa-users"></i>{isSidebarOpen && ' Khách hàng'}</a></li>
+                    <li><a href="#" className={`admin-nav-item ${currentTab === 'messages' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setCurrentTab('messages'); }} style={{ whiteSpace: 'nowrap' }}><i className="fas fa-comments"></i>{isSidebarOpen && ' Nhắn tin'}</a></li>
                 </ul>
             </aside>
 
@@ -482,8 +793,10 @@ const Admin = () => {
                     <div style={{ display: 'flex', gap: '10px', marginBottom: '16px' }}>
                         {[
                             { key: 'all', label: 'Tất cả' },
-                            { key: '1',   label: 'Laptop' },
-                            { key: '2',   label: 'Linh kiện PC' }
+                            ...categories.map(category => ({
+                                key: String(category.id),
+                                label: category.name
+                            }))
                         ].map(opt => (
                             <button
                                 key={opt.key}
@@ -559,6 +872,256 @@ const Admin = () => {
                                 ))}
                             </div>
                         )}
+                    </div>
+                </section>
+                )}
+
+                {currentTab === 'categories' && (
+                <section className="admin-content-area">
+                    <div className="admin-page-title">
+                        <h2>Quản lý danh mục</h2>
+                    </div>
+
+                    <div className="category-admin-layout">
+                        <div className="category-admin-form">
+                            <h3>{editingCategoryId ? 'Sửa danh mục' : 'Thêm danh mục mới'}</h3>
+                            <form onSubmit={handleCategorySubmit}>
+                                <div className="form-group">
+                                    <label>Tên danh mục:</label>
+                                    <input
+                                        type="text"
+                                        value={categoryName}
+                                        onChange={e => setCategoryName(e.target.value)}
+                                        placeholder="VD: Laptop, Linh kiện PC"
+                                        required
+                                    />
+                                </div>
+
+                                <div className="form-group">
+                                    <label>Danh sách thông số kỹ thuật:</label>
+                                    <div className="category-spec-editor">
+                                        {categorySpecGroups.map((group, groupIndex) => (
+                                            <div className="category-spec-group" key={groupIndex}>
+                                                <div className="category-spec-group-header">
+                                                    <input
+                                                        type="text"
+                                                        value={group.title}
+                                                        onChange={e => updateCategorySpecGroupTitle(groupIndex, e.target.value)}
+                                                        placeholder="Tên nhóm, VD: Bộ xử lý"
+                                                        required
+                                                    />
+                                                    {categorySpecGroups.length > 1 && (
+                                                        <button
+                                                            type="button"
+                                                            className="icon-danger-btn"
+                                                            onClick={() => removeCategorySpecGroup(groupIndex)}
+                                                            title="Xóa nhóm"
+                                                        >
+                                                            <i className="fas fa-trash"></i>
+                                                        </button>
+                                                    )}
+                                                </div>
+
+                                                <div className="category-spec-items">
+                                                    {group.items.map((item, itemIndex) => (
+                                                        <div className="category-spec-item" key={itemIndex}>
+                                                            <input
+                                                                type="text"
+                                                                value={item.label}
+                                                                onChange={e => updateCategorySpecLabel(groupIndex, itemIndex, e.target.value)}
+                                                                placeholder="Tên thông số, VD: Công nghệ CPU"
+                                                                required
+                                                            />
+                                                            {group.items.length > 1 && (
+                                                                <button
+                                                                    type="button"
+                                                                    className="icon-danger-btn"
+                                                                    onClick={() => removeCategorySpecItem(groupIndex, itemIndex)}
+                                                                    title="Xóa thông số"
+                                                                >
+                                                                    <i className="fas fa-times"></i>
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    ))}
+                                                </div>
+
+                                                <button
+                                                    type="button"
+                                                    className="spec-add-btn"
+                                                    onClick={() => addCategorySpecItem(groupIndex)}
+                                                >
+                                                    <i className="fas fa-plus"></i> Thêm thông số
+                                                </button>
+                                            </div>
+                                        ))}
+
+                                        <button type="button" className="spec-add-group-btn" onClick={addCategorySpecGroup}>
+                                            <i className="fas fa-plus"></i> Thêm nhóm thông số
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div style={{ display: 'flex', gap: '10px' }}>
+                                    <button type="submit" className="btn-submit">
+                                        <i className="fas fa-save"></i> {editingCategoryId ? 'Cập nhật danh mục' : 'Lưu danh mục'}
+                                    </button>
+                                    {editingCategoryId && (
+                                        <button type="button" className="btn-submit category-cancel-btn" onClick={resetCategoryForm}>
+                                            Hủy
+                                        </button>
+                                    )}
+                                </div>
+                            </form>
+                        </div>
+
+                        <div className="table-container category-admin-table">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Tên danh mục</th>
+                                        <th>Nhóm thông số</th>
+                                        <th>Sản phẩm</th>
+                                        <th>Hành động</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {categories.map(category => (
+                                        <tr key={category.id}>
+                                            <td>#{category.id}</td>
+                                            <td><strong>{category.name}</strong></td>
+                                            <td>{category.specGroups?.length || 0} nhóm</td>
+                                            <td>{products.filter(product => product.category_id === category.id).length}</td>
+                                            <td style={{ display: 'flex', gap: '8px' }}>
+                                                <button className="action-btn" style={{ background: '#3498db', color: 'white' }} onClick={() => handleEditCategory(category)}>
+                                                    <i className="fas fa-edit"></i> Sửa
+                                                </button>
+                                                <button className="action-btn btn-delete" onClick={() => handleDeleteCategory(category.id)}>
+                                                    <i className="fas fa-trash"></i> Xóa
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                    {categories.length === 0 && (
+                                        <tr><td colSpan="5" style={{ textAlign: 'center' }}>Chưa có danh mục nào</td></tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+                )}
+
+                {currentTab === 'coupons' && (
+                <section className="admin-content-area">
+                    <div className="admin-page-title">
+                        <h2>Quản lý Coupon</h2>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(320px, 420px) minmax(620px, 1fr)', gap: '24px', alignItems: 'start' }}>
+                        <div style={{ background: 'white', padding: '24px', borderRadius: '8px', boxShadow: '0 2px 5px rgba(0,0,0,0.08)' }}>
+                            <h3 style={{ marginTop: 0 }}>{editingCouponId ? 'Sửa coupon' : 'Thêm coupon'}</h3>
+                            <form onSubmit={handleCouponSubmit}>
+                                <div className="form-group">
+                                    <label>Mã coupon:</label>
+                                    <input type="text" value={couponForm.code} onChange={e => setCouponForm({ ...couponForm, code: e.target.value.toUpperCase() })} placeholder="VD: SALE10" required />
+                                </div>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                                    <div className="form-group">
+                                        <label>Loại giảm:</label>
+                                        <select value={couponForm.discount_type} onChange={e => setCouponForm({ ...couponForm, discount_type: e.target.value })}>
+                                            <option value="percent">Phần trăm (%)</option>
+                                            <option value="fixed">Trừ trực tiếp</option>
+                                        </select>
+                                    </div>
+                                    <div className="form-group">
+                                        <label>Mức giảm:</label>
+                                        <input type="number" min="1" max={couponForm.discount_type === 'percent' ? '100' : undefined} value={couponForm.discount_value} onChange={e => setCouponForm({ ...couponForm, discount_value: e.target.value })} required />
+                                    </div>
+                                </div>
+                                <div className="form-group">
+                                    <label>Bắt đầu:</label>
+                                    <input type="datetime-local" value={couponForm.start_date} onChange={e => setCouponForm({ ...couponForm, start_date: e.target.value })} required />
+                                </div>
+                                <div className="form-group">
+                                    <label>Kết thúc:</label>
+                                    <input type="datetime-local" value={couponForm.end_date} onChange={e => setCouponForm({ ...couponForm, end_date: e.target.value })} required />
+                                </div>
+                                <div className="form-group">
+                                    <label>Phạm vi áp dụng:</label>
+                                    <select value={couponForm.scope_type} onChange={e => setCouponForm({ ...couponForm, scope_type: e.target.value, product_ids: e.target.value === 'all' ? [] : couponForm.product_ids })}>
+                                        <option value="all">Tất cả sản phẩm</option>
+                                        <option value="products">Sản phẩm được chọn</option>
+                                    </select>
+                                </div>
+                                {couponForm.scope_type === 'products' && (
+                                    <div className="form-group">
+                                        <label>Chọn sản phẩm:</label>
+                                        <select multiple size="6" value={couponForm.product_ids.map(String)} onChange={e => handleCouponMultiSelect('product_ids', Array.from(e.target.selectedOptions, option => option.value))}>
+                                            {products.map(product => <option key={product.id} value={product.id}>{product.name}</option>)}
+                                        </select>
+                                    </div>
+                                )}
+                                <div className="form-group">
+                                    <label>Đối tượng áp dụng:</label>
+                                    <select value={couponForm.target_type} onChange={e => setCouponForm({ ...couponForm, target_type: e.target.value, user_ids: e.target.value === 'all' ? [] : couponForm.user_ids })}>
+                                        <option value="all">Tất cả khách hàng</option>
+                                        <option value="users">Khách hàng được chọn</option>
+                                    </select>
+                                </div>
+                                {couponForm.target_type === 'users' && (
+                                    <div className="form-group">
+                                        <label>Chọn khách hàng:</label>
+                                        <select multiple size="5" value={couponForm.user_ids.map(String)} onChange={e => handleCouponMultiSelect('user_ids', Array.from(e.target.selectedOptions, option => option.value))}>
+                                            {customers.map(customer => <option key={customer.id} value={customer.id}>{customer.full_name || customer.name} ({customer.email})</option>)}
+                                        </select>
+                                    </div>
+                                )}
+                                <div className="form-group">
+                                    <label>Trạng thái:</label>
+                                    <select value={couponForm.status} onChange={e => setCouponForm({ ...couponForm, status: e.target.value })}>
+                                        <option value="ACTIVE">Hoạt động</option>
+                                        <option value="INACTIVE">Tạm khóa</option>
+                                    </select>
+                                </div>
+                                <div style={{ display: 'flex', gap: '10px' }}>
+                                    <button type="submit" className="btn-submit"><i className="fas fa-save"></i> {editingCouponId ? 'Cập nhật' : 'Thêm coupon'}</button>
+                                    {editingCouponId && <button type="button" className="btn-submit category-cancel-btn" onClick={resetCouponForm}>Hủy</button>}
+                                </div>
+                            </form>
+                        </div>
+
+                        <div className="table-container">
+                            <table>
+                                <thead>
+                                    <tr><th>Mã</th><th>Giảm</th><th>Thời hạn</th><th>Phạm vi</th><th>Đối tượng</th><th>Trạng thái</th><th>Hành động</th></tr>
+                                </thead>
+                                <tbody>
+                                    {coupons.map(coupon => {
+                                        const now = new Date();
+                                        const expired = coupon.end_date && now > new Date(coupon.end_date);
+                                        const statusLabel = coupon.status === 'INACTIVE' ? 'Tạm khóa' : expired ? 'Hết hạn' : 'Hoạt động';
+                                        const statusColor = statusLabel === 'Hoạt động' ? '#27ae60' : statusLabel === 'Hết hạn' ? '#e74c3c' : '#7f8c8d';
+                                        return (
+                                            <tr key={coupon.id}>
+                                                <td><strong>{coupon.code}</strong></td>
+                                                <td>{coupon.discount_type === 'percent' ? `${coupon.discount_value}%` : formatMoney(coupon.discount_value)}</td>
+                                                <td><div>{formatDateTime(coupon.start_date)}</div><div style={{ color: '#777', fontSize: '12px' }}>đến {formatDateTime(coupon.end_date)}</div></td>
+                                                <td>{coupon.scope_type === 'products' ? `${coupon.product_ids?.length || 0} sản phẩm` : 'Tất cả sản phẩm'}</td>
+                                                <td>{coupon.target_type === 'users' ? `${coupon.user_ids?.length || 0} khách hàng` : 'Tất cả khách hàng'}</td>
+                                                <td><span style={{ padding: '5px 9px', borderRadius: '4px', background: statusColor, color: 'white', fontSize: '12px', fontWeight: 'bold' }}>{statusLabel}</span></td>
+                                                <td style={{ display: 'flex', gap: '8px' }}>
+                                                    <button className="action-btn" style={{ background: '#3498db', color: 'white' }} onClick={() => handleEditCoupon(coupon)}><i className="fas fa-edit"></i> Sửa</button>
+                                                    <button className="action-btn btn-delete" onClick={() => handleDeleteCoupon(coupon.id)}><i className="fas fa-trash"></i> Xóa</button>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                    {coupons.length === 0 && <tr><td colSpan="7" style={{ textAlign: 'center' }}>Chưa có coupon</td></tr>}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </section>
                 )}
@@ -671,6 +1234,114 @@ const Admin = () => {
                                 {paymentHistory.length === 0 && <tr><td colSpan="8" style={{ textAlign: 'center' }}>Chưa có lịch sử thanh toán</td></tr>}
                             </tbody>
                         </table>
+                    </div>
+                </section>
+                )}
+
+                {currentTab === 'messages' && (
+                <section className="admin-content-area">
+                    <div className="admin-page-title">
+                        <h2>Nhắn tin hỗ trợ khách hàng</h2>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '320px minmax(0, 1fr)', gap: '18px', minHeight: '620px' }}>
+                        <div style={{ background: 'white', borderRadius: '8px', boxShadow: '0 2px 5px rgba(0,0,0,0.08)', overflow: 'hidden' }}>
+                            <div style={{ padding: '16px', borderBottom: '1px solid #edf0f3' }}>
+                                <strong>Hội thoại</strong>
+                                <div style={{ color: '#777', fontSize: '13px', marginTop: '4px' }}>{sortedSupportConversations.length} cuộc trò chuyện</div>
+                            </div>
+
+                            <div style={{ maxHeight: '560px', overflowY: 'auto' }}>
+                                {sortedSupportConversations.map(conversation => {
+                                    const lastMessage = conversation.messages?.[conversation.messages.length - 1];
+                                    const isActive = activeSupportConversation?.id === conversation.id;
+
+                                    return (
+                                        <button
+                                            key={conversation.id}
+                                            type="button"
+                                            onClick={() => setActiveSupportConversationId(conversation.id)}
+                                            style={{
+                                                width: '100%',
+                                                border: 'none',
+                                                borderBottom: '1px solid #f0f0f0',
+                                                padding: '14px 16px',
+                                                textAlign: 'left',
+                                                cursor: 'pointer',
+                                                background: isActive ? '#e8f4ff' : 'white'
+                                            }}
+                                        >
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', marginBottom: '6px' }}>
+                                                <strong style={{ color: '#222' }}>{conversation.customerName || 'Khách hàng'}</strong>
+                                                <span style={{ color: '#999', fontSize: '12px', whiteSpace: 'nowrap' }}>
+                                                    {conversation.updatedAt ? new Date(conversation.updatedAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : ''}
+                                                </span>
+                                            </div>
+                                            <div style={{ color: '#777', fontSize: '13px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                {lastMessage ? `${lastMessage.sender === 'admin' ? 'Admin: ' : ''}${lastMessage.text}` : 'Chưa có tin nhắn'}
+                                            </div>
+                                        </button>
+                                    );
+                                })}
+
+                                {sortedSupportConversations.length === 0 && (
+                                    <div style={{ padding: '24px 16px', color: '#777', textAlign: 'center' }}>Chưa có hội thoại nào</div>
+                                )}
+                            </div>
+                        </div>
+
+                        <div style={{ background: 'white', borderRadius: '8px', boxShadow: '0 2px 5px rgba(0,0,0,0.08)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                            {activeSupportConversation ? (
+                                <>
+                                    <div style={{ padding: '16px 18px', borderBottom: '1px solid #edf0f3' }}>
+                                        <strong>{activeSupportConversation.customerName || 'Khách hàng'}</strong>
+                                        <div style={{ color: '#777', fontSize: '13px', marginTop: '4px' }}>
+                                            {activeSupportConversation.customerEmail || activeSupportConversation.customerId}
+                                        </div>
+                                    </div>
+
+                                    <div style={{ flex: 1, padding: '18px', background: '#f6f8fa', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                        {(activeSupportConversation.messages || []).map(message => (
+                                            <div
+                                                key={message.id}
+                                                style={{
+                                                    maxWidth: '70%',
+                                                    alignSelf: message.sender === 'admin' ? 'flex-end' : 'flex-start',
+                                                    background: message.sender === 'admin' ? 'var(--primary-color)' : 'white',
+                                                    color: message.sender === 'admin' ? 'white' : '#333',
+                                                    border: message.sender === 'admin' ? 'none' : '1px solid #e6e9ed',
+                                                    borderRadius: '8px',
+                                                    padding: '10px 12px',
+                                                    lineHeight: 1.45
+                                                }}
+                                            >
+                                                <div>{message.text}</div>
+                                                <div style={{ opacity: 0.75, fontSize: '11px', marginTop: '5px', textAlign: 'right' }}>
+                                                    {message.createdAt ? new Date(message.createdAt).toLocaleString('vi-VN') : ''}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    <form onSubmit={handleSupportReply} style={{ display: 'flex', gap: '10px', padding: '14px', borderTop: '1px solid #edf0f3' }}>
+                                        <input
+                                            type="text"
+                                            value={supportReply}
+                                            onChange={e => setSupportReply(e.target.value)}
+                                            placeholder="Nhập phản hồi cho khách hàng..."
+                                            style={{ flex: 1, padding: '11px', border: '1px solid #d9dee4', borderRadius: '4px', outline: 'none' }}
+                                        />
+                                        <button type="submit" style={{ border: 'none', borderRadius: '4px', background: 'var(--primary-color)', color: 'white', padding: '0 18px', cursor: 'pointer', fontWeight: 'bold' }}>
+                                            Gửi
+                                        </button>
+                                    </form>
+                                </>
+                            ) : (
+                                <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#777' }}>
+                                    Chọn một hội thoại để bắt đầu phản hồi
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </section>
                 )}
@@ -1143,6 +1814,7 @@ const Admin = () => {
                                 const filteredBrands = dbBrands.filter(brand => {
                                     const categoryMap = { '1': 'laptop', '2': 'component' };
                                     const categoryType = categoryMap[e.target.value];
+                                    if (!categoryType) return true;
                                     return brand.type === categoryType || brand.type === 'both';
                                 });
                                 if (filteredBrands.length > 0) {

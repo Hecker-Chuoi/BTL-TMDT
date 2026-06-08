@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { getDB, getMainImage, formatMoney, addToCart, getCartKey, getFlashSaleDiscountForProduct } from '../utils/mockData';
+import { getDB, getMainImage, formatMoney, getCartKey, getFlashSaleDiscountForProduct } from '../utils/mockData';
 
 const ProductDetail = () => {
     const { id } = useParams();
@@ -8,6 +8,8 @@ const ProductDetail = () => {
     const [product, setProduct] = useState(null);
     const [mainImageUrl, setMainImageUrl] = useState("");
     const [quantity, setQuantity] = useState(1);
+    const [activeInfoTab, setActiveInfoTab] = useState('specs');
+    const [collapsedSpecGroups, setCollapsedSpecGroups] = useState({});
     
     // Reviews state
     const [reviews, setReviews] = useState([]);
@@ -26,6 +28,16 @@ const ProductDetail = () => {
         if (found) {
             setProduct(found);
             setMainImageUrl(getMainImage(found));
+            const specGroups = found.specGroups?.length
+                ? found.specGroups
+                : (found.specs || []).length
+                    ? [{ title: 'Thông số kỹ thuật', items: found.specs }]
+                    : [];
+            const collapsedGroups = specGroups.reduce((acc, group, groupIndex) => {
+                acc[`${group.title || 'group'}-${groupIndex}`] = true;
+                return acc;
+            }, {});
+            setCollapsedSpecGroups(collapsedGroups);
         }
         
         loadReviewsAndEligibility();
@@ -175,6 +187,51 @@ const ProductDetail = () => {
         return (totalRating / reviews.length).toFixed(1);
     };
 
+    const getSpecGroups = () => {
+        if (!product?.specs || product.specs.length === 0) return [];
+
+        if (product.specGroups && product.specGroups.length > 0) {
+            return product.specGroups;
+        }
+
+        return [{
+            title: 'Thông số kỹ thuật',
+            items: product.specs.map(spec => ({
+                label: spec.spec_key,
+                value: spec.spec_value
+            }))
+        }];
+    };
+
+    const getSpecGroupKey = (group, groupIndex) => `${group.title || 'group'}-${groupIndex}`;
+
+    const toggleSpecGroup = (groupKey) => {
+        setCollapsedSpecGroups(prev => ({
+            ...prev,
+            [groupKey]: !prev[groupKey]
+        }));
+    };
+
+    const renderProductDescription = () => {
+        if (!product.description) {
+            return <p>Chưa có mô tả chi tiết cho sản phẩm này.</p>;
+        }
+
+        const description = product.description.trim();
+        if (description.startsWith('<')) {
+            return <div dangerouslySetInnerHTML={{ __html: description }} />;
+        }
+
+        return description.split('\n').filter(Boolean).map((paragraph, index) => (
+            <p key={index}>{paragraph}</p>
+        ));
+    };
+
+    const getPlainDescription = () => {
+        if (!product.description) return 'Chưa có mô tả chi tiết cho sản phẩm này.';
+        return product.description.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+    };
+
     if (!product) return <h3 style={{ textAlign: 'center', margin: '50px 0' }}>Sản phẩm không tồn tại!</h3>;
 
     const discountPercent = getFlashSaleDiscountForProduct(product.id);
@@ -244,7 +301,7 @@ const ProductDetail = () => {
                     
                     <div style={{ marginBottom: '25px', padding: '15px', background: '#f8f9fa', borderRadius: '6px', borderLeft: '4px solid var(--primary-color)' }}>
                         <h4 style={{ marginBottom: '8px', fontSize: '15px' }}>Đặc điểm nổi bật:</h4>
-                        <p style={{ color: '#444', lineHeight: 1.6, fontSize: '14px' }}>{product.description || 'Chưa có mô tả chi tiết cho sản phẩm này.'}</p>
+                        <p style={{ color: '#444', lineHeight: 1.6, fontSize: '14px' }}>{getPlainDescription()}</p>
                     </div>
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '25px' }}>
@@ -266,23 +323,76 @@ const ProductDetail = () => {
                         <i className="fas fa-cart-plus" style={{ marginRight: '8px' }}></i> THÊM VÀO GIỎ HÀNG
                     </button>
                     
-                    {product.specs && product.specs.length > 0 && (
-                        <div style={{ marginTop: '30px', background: '#fff', padding: '20px', borderRadius: '8px', border: '1px solid #eee' }}>
-                            <h3 style={{ marginBottom: '15px', borderBottom: '2px solid var(--bg-color)', paddingBottom: '10px' }}>Thông số kỹ thuật</h3>
-                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
-                                <tbody>
-                                    {product.specs.map((spec, index) => (
-                                        <tr key={index} style={{ backgroundColor: index % 2 === 0 ? '#f9f9f9' : '#fff' }}>
-                                            <td style={{ padding: '12px 15px', border: '1px solid #eee', fontWeight: 'bold', width: '35%', color: '#555' }}>{spec.spec_key}</td>
-                                            <td style={{ padding: '12px 15px', border: '1px solid #eee', color: '#333' }}>{spec.spec_value}</td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    )}
                 </div>
             </div>
+
+            <section className="product-info-tabs">
+                <div id="tab-spec" className="detail-tabs col2">
+                    <button
+                        type="button"
+                        id="specification"
+                        className={`detail-tab-link ${activeInfoTab === 'specs' ? 'current' : ''}`}
+                        onClick={() => setActiveInfoTab('specs')}
+                    >
+                        Thông số kỹ thuật
+                    </button>
+                    <button
+                        type="button"
+                        className={`detail-tab-link ${activeInfoTab === 'description' ? 'current' : ''}`}
+                        onClick={() => setActiveInfoTab('description')}
+                    >
+                        Thông tin sản phẩm
+                    </button>
+                </div>
+
+                <div className={`specifications tab-content ${activeInfoTab === 'specs' ? 'current' : ''}`} id="tab-1">
+                    {getSpecGroups().length > 0 ? (
+                        <div className="specification-item">
+                            {getSpecGroups().map((group, groupIndex) => {
+                                const groupKey = getSpecGroupKey(group, groupIndex);
+                                const isCollapsed = !!collapsedSpecGroups[groupKey];
+
+                                return (
+                                    <div className="box-specifi" key={groupKey}>
+                                        <button
+                                            type="button"
+                                            className={`spec-group-title ${isCollapsed ? '' : 'active'}`}
+                                            onClick={() => toggleSpecGroup(groupKey)}
+                                            aria-expanded={!isCollapsed}
+                                            aria-controls={`spec-group-${groupIndex}`}
+                                        >
+                                            <h3>{group.title}</h3>
+                                            <i className="fas fa-chevron-down"></i>
+                                        </button>
+                                        {!isCollapsed && (
+                                            <ul className="text-specifi active" id={`spec-group-${groupIndex}`}>
+                                                {(group.items || []).map((item, itemIndex) => (
+                                                    <li key={`${item.label}-${itemIndex}`}>
+                                                        <aside>
+                                                            <strong>{item.label}:</strong>
+                                                        </aside>
+                                                        <aside>
+                                                            <span>{item.value}</span>
+                                                        </aside>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    ) : (
+                        <p className="empty-info">Chưa có thông số kỹ thuật cho sản phẩm này.</p>
+                    )}
+                </div>
+
+                <div className={`description tab-content ${activeInfoTab === 'description' ? 'current' : ''}`} id="tab-2">
+                    <div className="text-detail expand">
+                        {renderProductDescription()}
+                    </div>
+                </div>
+            </section>
 
             <div style={{ marginTop: '50px', background: 'white', padding: '30px', borderRadius: '8px', boxShadow: '0 2px 5px rgba(0,0,0,0.1)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '30px', paddingBottom: '20px', borderBottom: '2px solid var(--bg-color)' }}>

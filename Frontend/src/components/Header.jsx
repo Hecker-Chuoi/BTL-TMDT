@@ -3,50 +3,41 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { getCartKey, removeLoggedInUser, getSearchSuggestions } from '../utils/mockData';
 import NotificationBell from './NotificationBell';
 
+const readCartCount = () => {
+  try {
+    const cartKey = getCartKey();
+    if (!cartKey) return 0;
+    const cartItems = JSON.parse(localStorage.getItem(cartKey)) || [];
+    return cartItems.reduce((sum, item) => sum + item.quantity, 0);
+  } catch {
+    return 0;
+  }
+};
+
 const Header = () => {
-  const [cartCount, setCartCount] = useState(0);
-  const [currentUser, setCurrentUser] = useState(null);
+  const [cartCount, setCartCount] = useState(readCartCount);
   const [searchInput, setSearchInput] = useState('');
   const [suggestions, setSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const navigate = useNavigate();
-  const location = useLocation();
+  useLocation();
+  const currentUser = JSON.parse(sessionStorage.getItem('currentUser'));
 
-  useEffect(() => {
-    const user = JSON.parse(sessionStorage.getItem('currentUser'));
-    setCurrentUser(user);
-    updateCartCount(); // Re-check the custom cart immediately after auth change
-  }, [location]);
+  function updateCartCount() {
+    setCartCount(readCartCount());
+  }
 
   const handleLogout = () => {
     if (currentUser) {
       removeLoggedInUser(currentUser.email);
     }
     sessionStorage.removeItem('currentUser');
-    setCurrentUser(null);
     updateCartCount();
     window.dispatchEvent(new Event('cartUpdated')); // Force other listeners (if any) to sync
     navigate('/login');
   };
 
-  const updateCartCount = () => {
-    try {
-      const cartKey = getCartKey();
-      if (!cartKey) {
-        setCartCount(0);
-        return;
-      }
-      const cartItems = JSON.parse(localStorage.getItem(cartKey)) || [];
-      const count = cartItems.reduce((sum, item) => sum + item.quantity, 0);
-      setCartCount(count);
-    } catch (error) {
-      setCartCount(0);
-    }
-  };
-
   useEffect(() => {
-    updateCartCount();
-
     // Listen to custom cart update event
     const handleCartUpdate = () => updateCartCount();
     window.addEventListener('cartUpdated', handleCartUpdate);
@@ -220,6 +211,10 @@ const Header = () => {
           </Link>
           {currentUser ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                  <Link to="/orders" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '5px', fontWeight: 'bold', fontSize: '14px', color: '#333' }}>
+                      <i className="fas fa-receipt"></i>
+                      Đơn hàng
+                  </Link>
                   <Link to="/profile" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '5px', fontWeight: 'bold', fontSize: '14px', color: 'var(--primary-color)' }}>
                       <i className="fas fa-user-circle"></i>
                       {currentUser.name}
